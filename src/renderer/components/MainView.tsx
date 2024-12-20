@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Routes, Route } from 'react-router-dom';
 import { Settings, Pin, Folder } from 'lucide-react';
 import RecordButton from './RecordButton';
 import RecordingsList from './RecordingsList';
+import RecordingView from './RecordingView';
 import { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
 import { resolveTheme } from '../utils/theme';
@@ -310,30 +311,48 @@ function MainView() {
         </div>
       </div>
 
-      <div className="flex flex-col items-center h-[calc(100vh-36px)]">
-        <div className="flex flex-col items-center justify-center min-h-[180px] pt-2">
-          <RecordButton
-            isRecording={isRecording}
-            audioLevel={audioLevel}
-            elapsedTime={elapsedTime}
-            onToggleRecording={toggleRecording}
-          />
-          {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
-        </div>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <div className="flex flex-col items-center h-[calc(100vh-36px)]">
+              <div className="flex flex-col items-center justify-center min-h-[180px] pt-2">
+                <RecordButton
+                  isRecording={isRecording}
+                  audioLevel={audioLevel}
+                  elapsedTime={elapsedTime}
+                  onToggleRecording={toggleRecording}
+                />
+                {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+              </div>
 
-        <div className="flex-1 w-full overflow-y-auto">
-          <RecordingsList
-            recordings={recordings}
-            onPlay={handlePlayRecording}
-            onDelete={handleDeleteRecording}
-            onTranscribe={handleTranscribe}
-            onStopRecording={isRecording ? toggleRecording : undefined}
-            elapsedTime={elapsedTime}
-            isTranscribing={isTranscribing}
-            transcriptions={transcriptions}
-          />
-        </div>
-      </div>
+              <div className="flex-1 w-full overflow-y-auto">
+                <RecordingsList
+                  recordings={recordings}
+                  onPlay={handlePlayRecording}
+                  onDelete={handleDeleteRecording}
+                  onTranscribe={handleTranscribe}
+                  onStopRecording={isRecording ? toggleRecording : undefined}
+                  elapsedTime={elapsedTime}
+                  isTranscribing={isTranscribing}
+                />
+              </div>
+            </div>
+          }
+        />
+        <Route
+          path="/recording/:recordingPath"
+          element={
+            <RecordingView
+              recordings={recordings}
+              onPlay={handlePlayRecording}
+              onTranscribe={handleTranscribe}
+              isTranscribing={isTranscribing}
+              transcriptions={transcriptions}
+            />
+          }
+        />
+      </Routes>
     </div>
   );
 }

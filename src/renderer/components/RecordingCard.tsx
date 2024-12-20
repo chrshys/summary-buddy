@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Play, Trash2, FileText, Loader } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import type { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -10,7 +11,6 @@ interface RecordingCardProps {
   onDelete: (recording: Recording) => void;
   onTranscribe: (recording: Recording) => Promise<void>;
   isTranscribing?: boolean;
-  transcription?: string;
 }
 
 const formatDuration = (seconds: number): string => {
@@ -67,11 +67,11 @@ export default function RecordingCard({
   onPlay,
   onDelete,
   onTranscribe,
-  isTranscribing,
-  transcription,
+  isTranscribing = false,
 }: RecordingCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const { effectiveTheme } = useTheme();
+  const navigate = useNavigate();
   const date = recording.date ? new Date(recording.date) : null;
   const formattedDate = date
     ? `${date.toLocaleDateString('en-US', {
@@ -99,20 +99,28 @@ export default function RecordingCard({
     }
   };
 
+  const handleCardClick = () => {
+    navigate(`/recording/${encodeURIComponent(recording.path)}`);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.2 }}
-      className={`flex flex-col p-3 transition-all duration-200 border rounded-lg group ${getCardClasses(
+      onClick={handleCardClick}
+      className={`flex flex-col p-3 transition-all duration-200 border rounded-lg group cursor-pointer ${getCardClasses(
         effectiveTheme,
       )}`}
     >
       <div className="flex items-center justify-between">
         <button
           type="button"
-          onClick={() => onPlay(recording)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onPlay(recording);
+          }}
           className={`p-2 mr-3 transition-colors rounded-md ${getPlayButtonClasses(
             effectiveTheme,
           )}`}
@@ -140,7 +148,10 @@ export default function RecordingCard({
         <div className="flex ml-4 transition-opacity opacity-0 group-hover:opacity-100">
           <button
             type="button"
-            onClick={() => onTranscribe(recording)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTranscribe(recording);
+            }}
             disabled={isTranscribing}
             className={`p-2 transition-colors rounded-md ${getPlayButtonClasses(
               effectiveTheme,
@@ -155,7 +166,10 @@ export default function RecordingCard({
           </button>
           <button
             type="button"
-            onClick={() => handleDelete(recording)}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete(recording);
+            }}
             disabled={isDeleting}
             className={`p-2 transition-colors rounded-md ${getDeleteButtonClasses(
               effectiveTheme,
@@ -166,39 +180,6 @@ export default function RecordingCard({
           </button>
         </div>
       </div>
-      {transcription && (
-        <div
-          className={`p-2 mt-2 rounded ${
-            effectiveTheme === 'dark'
-              ? 'bg-app-dark-surface/40'
-              : 'bg-app-light-surface'
-          }`}
-        >
-          <div
-            className={`mb-1 text-sm font-medium ${
-              effectiveTheme === 'dark'
-                ? 'text-app-dark-text-primary'
-                : 'text-app-light-text-primary'
-            }`}
-          >
-            Transcription:
-          </div>
-          <div
-            className={`text-sm ${
-              effectiveTheme === 'dark'
-                ? 'text-app-dark-text-secondary'
-                : 'text-app-light-text-secondary'
-            }`}
-          >
-            {transcription}
-          </div>
-        </div>
-      )}
     </motion.div>
   );
 }
-
-RecordingCard.defaultProps = {
-  isTranscribing: false,
-  transcription: undefined,
-};

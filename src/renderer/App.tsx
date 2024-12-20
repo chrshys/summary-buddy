@@ -10,7 +10,7 @@ export default function App() {
     <ThemeProvider>
       <Router>
         <Routes>
-          <Route path="/" element={<MainView />} />
+          <Route path="/*" element={<MainView />} />
           <Route path="/settings" element={<SettingsView />} />
         </Routes>
       </Router>
