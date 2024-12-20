@@ -8,16 +8,22 @@ export interface RecordingsListProps {
   recordings: Recording[];
   onPlay: (recording: Recording) => Promise<void>;
   onDelete: (recording: Recording) => Promise<void>;
+  onTranscribe: (recording: Recording) => Promise<void>;
   onStopRecording?: () => void;
   elapsedTime: number;
+  isTranscribing: Record<string, boolean>;
+  transcriptions: Record<string, string>;
 }
 
 export default function RecordingsList({
   recordings,
   onPlay,
   onDelete,
+  onTranscribe,
   onStopRecording,
   elapsedTime,
+  isTranscribing,
+  transcriptions,
 }: RecordingsListProps) {
   const handleDelete = async (recording: Recording) => {
     try {
@@ -47,10 +53,13 @@ export default function RecordingsList({
           )}
           {recordings.map((recording) => (
             <RecordingCard
-              key={recording.id || recording.path}
+              key={recording.path}
               recording={recording}
               onPlay={onPlay}
               onDelete={handleDelete}
+              onTranscribe={onTranscribe}
+              isTranscribing={isTranscribing[recording.path]}
+              transcription={transcriptions[recording.path]}
             />
           ))}
         </AnimatePresence>

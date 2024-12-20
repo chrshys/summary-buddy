@@ -112,6 +112,7 @@
     "framer-motion": "^11.15.0",
     "lucide-react": "^0.468.0",
     "music-metadata": "^10.6.4",
+    "openai": "^4.77.0",
     "postcss": "^8.4.49",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

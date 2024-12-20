@@ -1,7 +1,8 @@
 export interface Recording {
-  id?: string;
+  name: string;
   path: string;
   date?: string;
-  duration?: number;
+  duration: number;
+  isActive?: boolean;
 }
 

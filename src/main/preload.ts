@@ -47,6 +47,8 @@ const electronHandler = {
     listRecordings: () => ipcRenderer.invoke('list-recordings'),
     playRecording: (path: string) => ipcRenderer.invoke('play-recording', path),
     deleteRecording: (path: string) => ipcRenderer.invoke('delete-recording', path),
+    transcribeRecording: (path: string) =>
+      ipcRenderer.invoke('transcribe-recording', path),
   },
 };
 

@@ -35,6 +35,7 @@ declare global {
         listRecordings: () => Promise<{ recordings: RecordingInfo[]; error?: string }>;
         playRecording: (path: string) => Promise<{ success?: boolean; error?: string }>;
         deleteRecording: (path: string) => Promise<{ success?: boolean; error?: string }>;
+        transcribeRecording: (path: string) => Promise<{ success?: boolean; text?: string; error?: string }>;
       };
       ipcRenderer: {
         on(channel: 'recording-started' | 'recording-stopped' | 'audio-level', func: (...args: any[]) => void): () => void;

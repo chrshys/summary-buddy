@@ -28,6 +28,7 @@ import * as mm from 'music-metadata';
 import CoreAudioRecorder from './audio/coreaudio';
 import { resolveHtmlPath } from './util';
 import { RecordingMetadataStore } from './audio/RecordingMetadata';
+import TranscriptionService from './services/transcription';
 
 class AppUpdater {
   constructor() {
@@ -45,6 +46,7 @@ let audioLevelInterval: ReturnType<typeof setInterval> | null = null;
 let durationInterval: ReturnType<typeof setInterval> | null = null;
 let normalTrayIcon: NativeImage | null = null;
 let recordingTrayIcon: NativeImage | null = null;
+let transcriptionService: TranscriptionService | null = null;
 
 // Move these function declarations to the top, after the variable declarations
 function setRecordingState(isRecording: boolean) {
@@ -762,6 +764,47 @@ ipcMain.handle('delete-recording', async (_, filePath: string) => {
     return {
       error:
         error instanceof Error ? error.message : 'Failed to delete recording',
+    };
+  }
+});
+
+// Add transcription handler
+ipcMain.handle('transcribe-recording', async (_, filePath: string) => {
+  try {
+    // Get API key from config
+    const configPath = path.join(app.getPath('userData'), 'config.json');
+    const { apiKey } = JSON.parse(
+      await fsPromises.readFile(configPath, 'utf8'),
+    );
+
+    if (!apiKey) {
+      return { error: 'OpenAI API key not found. Please add it in settings.' };
+    }
+
+    // Initialize transcription service if needed
+    if (!transcriptionService) {
+      transcriptionService = new TranscriptionService(apiKey);
+    }
+
+    // Transcribe the audio
+    const result = await transcriptionService.transcribeAudio(filePath);
+
+    if (result.error) {
+      return { error: result.error };
+    }
+
+    // Save transcription alongside the audio file
+    const transcriptionPath = `${filePath}.transcript`;
+    await fsPromises.writeFile(transcriptionPath, result.text);
+
+    return { success: true, text: result.text };
+  } catch (error) {
+    console.error('Error during transcription:', error);
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Unknown error during transcription',
     };
   }
 });

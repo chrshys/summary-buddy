@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Trash2 } from 'lucide-react';
+import { Play, Trash2, FileText, Loader } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
@@ -8,6 +8,9 @@ interface RecordingCardProps {
   recording: Recording;
   onPlay: (recording: Recording) => void;
   onDelete: (recording: Recording) => void;
+  onTranscribe: (recording: Recording) => Promise<void>;
+  isTranscribing?: boolean;
+  transcription?: string;
 }
 
 const formatDuration = (seconds: number): string => {
@@ -63,6 +66,9 @@ export default function RecordingCard({
   recording,
   onPlay,
   onDelete,
+  onTranscribe,
+  isTranscribing,
+  transcription,
 }: RecordingCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const { effectiveTheme } = useTheme();
@@ -99,50 +105,100 @@ export default function RecordingCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.2 }}
-      className={`flex items-center justify-between p-3 transition-all duration-200 border rounded-lg group ${getCardClasses(
+      className={`flex flex-col p-3 transition-all duration-200 border rounded-lg group ${getCardClasses(
         effectiveTheme,
       )}`}
     >
-      <button
-        type="button"
-        onClick={() => onPlay(recording)}
-        className={`p-2 mr-3 transition-colors rounded-md ${getPlayButtonClasses(
-          effectiveTheme,
-        )}`}
-        aria-label="Play recording"
-      >
-        <Play size={16} />
-      </button>
-      <div className="flex flex-col flex-1 min-w-0">
-        <div className="flex items-baseline gap-2">
-          <span
-            className={`text-xs truncate ${getDateClasses(effectiveTheme)}`}
-          >
-            {formattedDate}
-          </span>
-          <span className={`text-xs ${getTimeClasses(effectiveTheme)}`}>
-            {formattedTime}
-          </span>
-        </div>
-        <div className={`text-xs ${getDurationClasses(effectiveTheme)}`}>
-          {recording.duration
-            ? formatDuration(Math.round(recording.duration))
-            : 'Processing...'}
-        </div>
-      </div>
-      <div className="flex ml-4 transition-opacity opacity-0 group-hover:opacity-100">
+      <div className="flex items-center justify-between">
         <button
           type="button"
-          onClick={() => handleDelete(recording)}
-          disabled={isDeleting}
-          className={`p-2 transition-colors rounded-md ${getDeleteButtonClasses(
+          onClick={() => onPlay(recording)}
+          className={`p-2 mr-3 transition-colors rounded-md ${getPlayButtonClasses(
             effectiveTheme,
-          )} ${isDeleting ? 'opacity-50' : ''}`}
-          aria-label="Delete recording"
+          )}`}
+          aria-label="Play recording"
         >
-          <Trash2 size={16} />
+          <Play size={16} />
         </button>
+        <div className="flex flex-col flex-1 min-w-0">
+          <div className="flex items-baseline gap-2">
+            <span
+              className={`text-xs truncate ${getDateClasses(effectiveTheme)}`}
+            >
+              {formattedDate}
+            </span>
+            <span className={`text-xs ${getTimeClasses(effectiveTheme)}`}>
+              {formattedTime}
+            </span>
+          </div>
+          <div className={`text-xs ${getDurationClasses(effectiveTheme)}`}>
+            {recording.duration
+              ? formatDuration(Math.round(recording.duration))
+              : 'Processing...'}
+          </div>
+        </div>
+        <div className="flex ml-4 transition-opacity opacity-0 group-hover:opacity-100">
+          <button
+            type="button"
+            onClick={() => onTranscribe(recording)}
+            disabled={isTranscribing}
+            className={`p-2 transition-colors rounded-md ${getPlayButtonClasses(
+              effectiveTheme,
+            )} ${isTranscribing ? 'opacity-50' : ''}`}
+            aria-label="Transcribe recording"
+          >
+            {isTranscribing ? (
+              <Loader size={16} className="animate-spin" />
+            ) : (
+              <FileText size={16} />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDelete(recording)}
+            disabled={isDeleting}
+            className={`p-2 transition-colors rounded-md ${getDeleteButtonClasses(
+              effectiveTheme,
+            )} ${isDeleting ? 'opacity-50' : ''}`}
+            aria-label="Delete recording"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       </div>
+      {transcription && (
+        <div
+          className={`p-2 mt-2 rounded ${
+            effectiveTheme === 'dark'
+              ? 'bg-app-dark-surface/40'
+              : 'bg-app-light-surface'
+          }`}
+        >
+          <div
+            className={`mb-1 text-sm font-medium ${
+              effectiveTheme === 'dark'
+                ? 'text-app-dark-text-primary'
+                : 'text-app-light-text-primary'
+            }`}
+          >
+            Transcription:
+          </div>
+          <div
+            className={`text-sm ${
+              effectiveTheme === 'dark'
+                ? 'text-app-dark-text-secondary'
+                : 'text-app-light-text-secondary'
+            }`}
+          >
+            {transcription}
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }
+
+RecordingCard.defaultProps = {
+  isTranscribing: false,
+  transcription: undefined,
+};

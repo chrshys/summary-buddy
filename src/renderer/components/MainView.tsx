@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Settings, Pin, Folder } from 'lucide-react';
 import RecordButton from './RecordButton';
@@ -6,6 +6,8 @@ import RecordingsList from './RecordingsList';
 import { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
 import { resolveTheme } from '../utils/theme';
+
+// Add formatTime utility function
 
 function getButtonClasses(isPinned: boolean, theme: 'light' | 'dark'): string {
   if (isPinned) {
@@ -27,6 +29,12 @@ function MainView() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [transcriptions, setTranscriptions] = useState<Record<string, string>>(
+    {},
+  );
+  const [isTranscribing, setIsTranscribing] = useState<Record<string, boolean>>(
+    {},
+  );
 
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval>;
@@ -222,6 +230,27 @@ function MainView() {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
+  const handleTranscribe = async (recording: Recording): Promise<void> => {
+    try {
+      setIsTranscribing({ ...isTranscribing, [recording.path]: true });
+      const result = await window.electron.audioRecorder.transcribeRecording(
+        recording.path,
+      );
+
+      if (result.error) {
+        setError(result.error);
+      } else if (result.text) {
+        setTranscriptions({ ...transcriptions, [recording.path]: result.text });
+      }
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to transcribe recording';
+      setError(errorMessage);
+    } finally {
+      setIsTranscribing({ ...isTranscribing, [recording.path]: false });
+    }
+  };
+
   return (
     <div
       className={`h-screen ${
@@ -297,14 +326,11 @@ function MainView() {
             recordings={recordings}
             onPlay={handlePlayRecording}
             onDelete={handleDeleteRecording}
-            onStopRecording={
-              isRecording
-                ? () => {
-                    toggleRecording();
-                  }
-                : undefined
-            }
+            onTranscribe={handleTranscribe}
+            onStopRecording={isRecording ? toggleRecording : undefined}
             elapsedTime={elapsedTime}
+            isTranscribing={isTranscribing}
+            transcriptions={transcriptions}
           />
         </div>
       </div>
