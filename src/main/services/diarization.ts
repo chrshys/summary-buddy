@@ -15,12 +15,7 @@ export interface TranscriptionResult {
 }
 
 export interface SummaryResult {
-  summary?: string;
-  error?: string;
-}
-
-export interface ActionItemsResult {
-  actionItems?: string;
+  notes?: string;
   error?: string;
 }
 
@@ -126,55 +121,44 @@ class DiarizationService {
         return { error: 'Failed to get transcript ID' };
       }
 
-      // Use LeMUR to generate the summary
-      const summary = await this.client.lemur.task({
-        prompt: 'Please provide a concise summary of the key points discussed.',
+      // Generate combined notes with summary and action items
+      const notesResult = await this.client.lemur.task({
+        prompt: `Please provide comprehensive meeting notes that capture the key points and details of this conversation. Include:
+
+1. OVERVIEW
+- Brief context of the meeting
+- Main purpose or objectives discussed
+
+2. KEY DISCUSSION POINTS
+- Important topics covered
+- Major decisions made
+- Significant insights or findings
+- Include relevant details, examples, and context
+- Preserve important quotes or specific numbers mentioned
+
+3. CONCLUSIONS & NEXT STEPS
+- Final decisions or agreements reached
+- Any open questions or items requiring further discussion
+
+4. ACTION ITEMS
+List all action items, tasks, and commitments from the conversation:
+- Include who is responsible
+- Add any mentioned deadlines
+- Note any dependencies
+
+Format the response in a clear, well-structured manner using headings and bullet points. Be thorough but concise, and maintain the original context and nuance of the discussion.`,
         transcript_ids: [transcriptId],
       });
 
-      return { summary: summary.response };
+      return {
+        notes: notesResult.response,
+      };
     } catch (error) {
       return {
         error:
           error instanceof Error
             ? error.message
             : 'Unknown summarization error',
-      };
-    }
-  }
-
-  async createActionItems(audioFilePath: string): Promise<ActionItemsResult> {
-    try {
-      // Get the transcript ID if it exists
-      let transcriptId = this.transcriptIds.get(audioFilePath);
-
-      // If no transcript ID exists, create a new transcription
-      if (!transcriptId) {
-        const transcriptionResult = await this.transcribeAudio(audioFilePath);
-        if (transcriptionResult.error) {
-          return { error: transcriptionResult.error };
-        }
-        transcriptId = this.transcriptIds.get(audioFilePath);
-      }
-
-      if (!transcriptId) {
-        return { error: 'Failed to get transcript ID' };
-      }
-
-      // Use LeMUR to generate action items
-      const result = await this.client.lemur.task({
-        prompt:
-          'Extract all action items, tasks, and commitments from the conversation. Format them as a list with speaker labels. For each action item, start with the speaker label (e.g., [A], [B]) followed by their action. For example:\n[A] will schedule the meeting\n[A] will send the agenda\n[B] will prepare the presentation',
-        transcript_ids: [transcriptId],
-      });
-
-      return { actionItems: result.response };
-    } catch (error) {
-      return {
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Unknown error generating action items',
       };
     }
   }

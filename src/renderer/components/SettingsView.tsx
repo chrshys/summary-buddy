@@ -3,7 +3,29 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Sun, Moon, Monitor } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
-export function SettingsView() {
+const getThemeButtonClass = (
+  isSelected: boolean,
+  effectiveTheme: 'dark' | 'light',
+) => {
+  const baseClasses =
+    'flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors';
+
+  if (isSelected) {
+    return `${baseClasses} ${
+      effectiveTheme === 'dark'
+        ? 'bg-app-dark-surface text-app-dark-text-primary'
+        : 'bg-app-light-surface text-app-light-text-primary'
+    }`;
+  }
+
+  return `${baseClasses} ${
+    effectiveTheme === 'dark'
+      ? 'text-app-dark-text-secondary hover:text-app-dark-text-primary hover:bg-app-dark-surface/50'
+      : 'text-app-light-text-secondary hover:text-app-light-text-primary hover:bg-app-light-surface'
+  }`;
+};
+
+export default function SettingsView() {
   const navigate = useNavigate();
   const { theme, effectiveTheme, setTheme } = useTheme();
   const [openAiKey, setOpenAiKey] = useState('');
@@ -22,16 +44,22 @@ export function SettingsView() {
         setRecordingsPath(pathResult.path);
         if (openAiResult.key) setOpenAiKey(openAiResult.key);
         if (assemblyAiResult.key) setAssemblyAiKey(assemblyAiResult.key);
+        return { pathResult, openAiResult, assemblyAiResult };
       })
       .catch(() => setError('Failed to load settings'));
   }, []);
 
-  const handleOpenAiKeyChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleOpenAiKeyChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const newKey = e.target.value;
     setOpenAiKey(newKey);
 
     try {
-      const result = await window.electron.audioRecorder.setApiKey(newKey, 'openai');
+      const result = await window.electron.audioRecorder.setApiKey(
+        newKey,
+        'openai',
+      );
       if (result.error) {
         setError(result.error);
       } else {
@@ -43,12 +71,17 @@ export function SettingsView() {
     }
   };
 
-  const handleAssemblyAiKeyChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAssemblyAiKeyChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const newKey = e.target.value;
     setAssemblyAiKey(newKey);
 
     try {
-      const result = await window.electron.audioRecorder.setApiKey(newKey, 'assemblyai');
+      const result = await window.electron.audioRecorder.setApiKey(
+        newKey,
+        'assemblyai',
+      );
       if (result.error) {
         setError(result.error);
       } else {
@@ -64,9 +97,8 @@ export function SettingsView() {
     const result = await window.electron.audioRecorder.browseForFolder();
     if (result.path) {
       try {
-        const saveResult = await window.electron.audioRecorder.setRecordingsPath(
-          result.path,
-        );
+        const saveResult =
+          await window.electron.audioRecorder.setRecordingsPath(result.path);
         if (saveResult.error) {
           setError(saveResult.error);
         } else {
@@ -215,74 +247,57 @@ export function SettingsView() {
           </div>
 
           <div>
-            <label
-              className={`block text-xs mb-1.5 ${
+            <div
+              className={`text-xs mb-1.5 ${
                 effectiveTheme === 'dark'
                   ? 'text-app-dark-text-secondary'
                   : 'text-app-light-text-secondary'
               }`}
             >
               Theme
-              <div className="flex gap-2 mt-1.5">
-                <button
-                  type="button"
-                  onClick={() => setTheme('system')}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors ${
-                    theme === 'system'
-                      ? effectiveTheme === 'dark'
-                        ? 'bg-app-dark-surface text-app-dark-text-primary'
-                        : 'bg-app-light-surface text-app-light-text-primary'
-                      : effectiveTheme === 'dark'
-                      ? 'text-app-dark-text-secondary hover:text-app-dark-text-primary hover:bg-app-dark-surface/50'
-                      : 'text-app-light-text-secondary hover:text-app-light-text-primary hover:bg-app-light-surface'
-                  }`}
-                >
-                  <Monitor size={16} />
-                  System
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTheme('light')}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors ${
-                    theme === 'light'
-                      ? effectiveTheme === 'dark'
-                        ? 'bg-app-dark-surface text-app-dark-text-primary'
-                        : 'bg-app-light-surface text-app-light-text-primary'
-                      : effectiveTheme === 'dark'
-                      ? 'text-app-dark-text-secondary hover:text-app-dark-text-primary hover:bg-app-dark-surface/50'
-                      : 'text-app-light-text-secondary hover:text-app-light-text-primary hover:bg-app-light-surface'
-                  }`}
-                >
-                  <Sun size={16} />
-                  Light
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTheme('dark')}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors ${
-                    theme === 'dark'
-                      ? effectiveTheme === 'dark'
-                        ? 'bg-app-dark-surface text-app-dark-text-primary'
-                        : 'bg-app-light-surface text-app-light-text-primary'
-                      : effectiveTheme === 'dark'
-                      ? 'text-app-dark-text-secondary hover:text-app-dark-text-primary hover:bg-app-dark-surface/50'
-                      : 'text-app-light-text-secondary hover:text-app-light-text-primary hover:bg-app-light-surface'
-                  }`}
-                >
-                  <Moon size={16} />
-                  Dark
-                </button>
-              </div>
-            </label>
+            </div>
+            <div className="flex gap-2 mt-1.5">
+              <button
+                type="button"
+                onClick={() => setTheme('system')}
+                className={getThemeButtonClass(
+                  theme === 'system',
+                  effectiveTheme,
+                )}
+              >
+                <Monitor size={16} />
+                System
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme('light')}
+                className={getThemeButtonClass(
+                  theme === 'light',
+                  effectiveTheme,
+                )}
+              >
+                <Sun size={16} />
+                Light
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme('dark')}
+                className={getThemeButtonClass(
+                  theme === 'dark',
+                  effectiveTheme,
+                )}
+              >
+                <Moon size={16} />
+                Dark
+              </button>
+            </div>
           </div>
 
           {error && <div className="text-sm text-red-400">{error}</div>}
           {saveStatus && (
             <div
               className={`text-sm ${
-                effectiveTheme === 'dark'
-                  ? 'text-green-400'
-                  : 'text-green-600'
+                effectiveTheme === 'dark' ? 'text-green-400' : 'text-green-600'
               }`}
             >
               {saveStatus}

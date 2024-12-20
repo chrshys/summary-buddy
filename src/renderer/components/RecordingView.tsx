@@ -1,64 +1,58 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, FileText, Loader } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
+import { FileText, Loader, Play, Edit2, Check, X } from 'lucide-react';
+import ReactMarkdown, { Components } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
-import type { DiarizedSegment } from '../../main/services/diarization';
 
-type Tab = 'transcription' | 'summary' | 'actionItems';
+type Tab = 'my-notes' | 'summary';
 
-interface TabButtonProps {
-  tab: Tab;
-  label: string;
-  activeTab: Tab;
-  onClick: (tab: Tab) => void;
-  effectiveTheme: string;
-}
-
-function TabButton({
-  tab,
-  label,
-  activeTab,
-  onClick,
-  effectiveTheme,
-}: TabButtonProps) {
-  const isActive = activeTab === tab;
-  const isDark = effectiveTheme === 'dark';
-
-  const getThemeClasses = () => {
-    if (isDark) {
-      return isActive
-        ? 'bg-app-dark-surface text-app-dark-text-primary'
-        : 'text-app-dark-text-secondary hover:text-app-dark-text-primary';
-    }
-    return isActive
-      ? 'bg-app-light-surface text-app-light-text-primary'
-      : 'text-app-light-text-secondary hover:text-app-light-text-primary';
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={() => onClick(tab)}
-      className={`px-4 py-2 text-sm font-medium transition-colors rounded-md ${getThemeClasses()}`}
+const MarkdownComponents: Partial<Components> = {
+  ul: ({ children, className }) => (
+    <ul
+      className={`list-disc ml-4 space-y-0.5 leading-normal ${className || ''}`}
     >
-      {label}
-    </button>
-  );
-}
+      {children}
+    </ul>
+  ),
+  ol: ({ children, className }) => (
+    <ol
+      className={`list-decimal ml-4 space-y-0.5 leading-normal ${className || ''}`}
+    >
+      {children}
+    </ol>
+  ),
+  li: ({ children, className }) => (
+    <li className={`pl-1 leading-normal ${className || ''}`}>{children}</li>
+  ),
+  p: ({ children, className }) => (
+    <p className={`mb-3 ${className || ''}`}>{children}</p>
+  ),
+  h1: ({ children, className }) => (
+    <h1 className={`text-base font-bold mb-3 mt-8 ${className || ''}`}>
+      {children}
+    </h1>
+  ),
+  h2: ({ children, className }) => (
+    <h2 className={`text-sm font-bold mb-2 mt-6 ${className || ''}`}>
+      {children}
+    </h2>
+  ),
+  h3: ({ children, className }) => (
+    <h3 className={`text-sm font-semibold mb-2 mt-4 ${className || ''}`}>
+      {children}
+    </h3>
+  ),
+};
 
 interface RecordingViewProps {
   onPlay: (recording: Recording) => void;
-  onTranscribe: (recording: Recording) => Promise<void>;
-  onCreateSummary: (recording: Recording) => Promise<void>;
-  onCreateActionItems: (recording: Recording) => Promise<void>;
+  onGenerateNotes: (recording: Recording) => Promise<void>;
+  onUpdateTitle: (recording: Recording, newTitle: string) => void;
   recordings: Recording[];
-  isTranscribing: Record<string, boolean>;
-  isSummarizing: Record<string, boolean>;
-  isGeneratingActionItems: Record<string, boolean>;
-  transcriptions: Record<string, { segments: DiarizedSegment[] }>;
-  summaries: Record<string, string>;
-  actionItems: Record<string, string>;
+  isGeneratingNotes: Record<string, boolean>;
+  meetingNotes: Record<string, string>;
 }
 
 const formatDuration = (seconds: number): string => {
@@ -76,96 +70,47 @@ const formatDuration = (seconds: number): string => {
 
 export default function RecordingView({
   onPlay,
-  onTranscribe,
-  onCreateSummary,
-  onCreateActionItems,
+  onGenerateNotes,
+  onUpdateTitle,
   recordings,
-  isTranscribing,
-  isSummarizing,
-  isGeneratingActionItems,
-  transcriptions,
-  summaries,
-  actionItems,
+  isGeneratingNotes,
+  meetingNotes,
 }: RecordingViewProps) {
   const { recordingPath } = useParams<{ recordingPath: string }>();
-  const navigate = useNavigate();
   const { effectiveTheme } = useTheme();
-  const [recording, setRecording] = useState<Recording | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('transcription');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedTitle, setEditedTitle] = useState('');
+  const [activeTab, setActiveTab] = useState<Tab>('my-notes');
 
-  useEffect(() => {
-    if (recordingPath) {
-      const decodedPath = decodeURIComponent(recordingPath);
-      const foundRecording = recordings.find((r) => r.path === decodedPath);
-      setRecording(foundRecording || null);
+  const handleTitleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setEditedTitle(e.target.value);
+    },
+    [],
+  );
 
-      // Load files if they exist
-      if (foundRecording) {
-        const loadFiles = async () => {
-          try {
-            // Try to load transcription
-            const transcriptionPath = `${decodedPath}.txt`;
-            const transcriptionExists =
-              await window.electron.fileSystem.exists(transcriptionPath);
-            if (transcriptionExists) {
-              const transcriptionText =
-                await window.electron.fileSystem.readFile(transcriptionPath);
-              const segments = transcriptionText
-                .split('\n')
-                .map((line: string) => {
-                  const [speaker, ...textParts] = line.split(': ');
-                  return {
-                    speaker: speaker.replace('[', '').replace(']', ''),
-                    text: textParts.join(': '),
-                    start: 0, // We don't have timing info in the file
-                    end: 0,
-                    confidence: 1,
-                  };
-                });
-              transcriptions[decodedPath] = { segments };
-            }
+  const handleCancelEditing = useCallback(() => {
+    setIsEditing(false);
+  }, []);
 
-            // Try to load summary
-            const summaryPath = `${decodedPath}.summary.txt`;
-            const summaryExists =
-              await window.electron.fileSystem.exists(summaryPath);
-            if (summaryExists) {
-              const summaryText =
-                await window.electron.fileSystem.readFile(summaryPath);
-              summaries[decodedPath] = summaryText;
-            }
+  if (!recordingPath) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold">Recording not found</h2>
+        </div>
+      </div>
+    );
+  }
 
-            // Try to load action items
-            const actionItemsPath = `${decodedPath}.actions.txt`;
-            const actionItemsExist =
-              await window.electron.fileSystem.exists(actionItemsPath);
-            if (actionItemsExist) {
-              const actionItemsText =
-                await window.electron.fileSystem.readFile(actionItemsPath);
-              actionItems[decodedPath] = actionItemsText;
-            }
-          } catch (error) {
-            /* empty */
-          }
-        };
-
-        loadFiles();
-      }
-    }
-  }, [recordingPath, recordings, transcriptions, summaries, actionItems]);
+  const decodedPath = decodeURIComponent(recordingPath);
+  const recording = recordings.find((r) => r.path === decodedPath) || null;
 
   if (!recording) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <h2 className="text-xl font-semibold">Recording not found</h2>
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            className="mt-4 text-blue-500 hover:text-blue-600"
-          >
-            Go back to recordings
-          </button>
         </div>
       </div>
     );
@@ -188,74 +133,76 @@ export default function RecordingView({
       })
     : '';
 
+  const handleStartEditing = () => {
+    setEditedTitle(recording.title || formattedDate);
+    setIsEditing(true);
+  };
+
+  const handleSaveTitle = () => {
+    if (recording && editedTitle.trim()) {
+      onUpdateTitle(recording, editedTitle.trim());
+      setIsEditing(false);
+    }
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') handleSaveTitle();
+    if (e.key === 'Escape') handleCancelEditing();
+  };
+
   return (
-    <div
-      className={`h-screen flex flex-col ${
-        effectiveTheme === 'dark'
-          ? 'bg-app-dark-bg text-app-dark-text-primary'
-          : 'bg-app-light-bg text-app-light-text-primary'
-      }`}
-    >
-      <div
-        className={`flex items-center px-3 py-2 border-b ${
-          effectiveTheme === 'dark'
-            ? 'bg-app-dark-surface/50 border-app-dark-border'
-            : 'bg-app-light-surface/50 border-app-light-border'
-        } window-drag`}
-      >
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className={`p-1.5 mr-2 transition-colors rounded-md ${
-            effectiveTheme === 'dark'
-              ? 'text-app-dark-text-secondary hover:text-app-dark-text-primary hover:bg-app-dark-surface'
-              : 'text-app-light-text-secondary hover:text-app-light-text-primary hover:bg-app-light-surface'
-          }`}
-        >
-          <ArrowLeft size={16} />
-        </button>
-        <div
-          className={
-            effectiveTheme === 'dark'
-              ? 'text-sm font-medium text-app-dark-text-secondary'
-              : 'text-sm font-medium text-app-light-text-secondary'
-          }
-        >
-          Recording Details
-        </div>
-      </div>
-
-      <div className="flex-1 px-3 pb-12 overflow-y-auto">
-        <div className="flex items-center justify-between mt-4 mb-4">
-          <div>
-            <h1 className="text-xl font-semibold">{formattedDate}</h1>
-            <p
-              className={
-                effectiveTheme === 'dark'
-                  ? 'text-app-dark-text-secondary'
-                  : 'text-app-light-text-secondary'
-              }
-            >
-              {formattedTime}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => onPlay(recording)}
-              className={`p-2 transition-colors rounded-md ${
-                effectiveTheme === 'dark'
-                  ? 'text-app-dark-text-secondary hover:text-app-dark-text-primary hover:bg-app-dark-surface'
-                  : 'text-app-light-text-secondary hover:text-app-light-text-primary hover:bg-app-light-surface'
-              }`}
-              aria-label="Play recording"
-            >
-              <Play size={20} />
-            </button>
-          </div>
-        </div>
-
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex-1 px-8 py-8 pb-24 overflow-y-auto">
         <div className="mb-6">
+          {isEditing ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={editedTitle}
+                onChange={handleTitleChange}
+                className={`text-xl font-semibold bg-transparent border-b-2 border-blue-500 outline-none ${
+                  effectiveTheme === 'dark'
+                    ? 'text-app-dark-text-primary'
+                    : 'text-app-light-text-primary'
+                }`}
+                onKeyDown={handleTitleKeyDown}
+              />
+              <button
+                type="button"
+                onClick={handleSaveTitle}
+                className="p-1 text-green-500 hover:text-green-600"
+                aria-label="Save title"
+              >
+                <Check size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelEditing}
+                className="p-1 text-red-500 hover:text-red-600"
+                aria-label="Cancel editing"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold">
+                {recording.title || formattedDate}
+              </h1>
+              <button
+                type="button"
+                onClick={handleStartEditing}
+                className={`p-1 opacity-50 hover:opacity-100 ${
+                  effectiveTheme === 'dark'
+                    ? 'text-app-dark-text-primary'
+                    : 'text-app-light-text-primary'
+                }`}
+                aria-label="Edit title"
+              >
+                <Edit2 size={16} />
+              </button>
+            </div>
+          )}
           <p
             className={
               effectiveTheme === 'dark'
@@ -263,185 +210,162 @@ export default function RecordingView({
                 : 'text-app-light-text-secondary'
             }
           >
-            Duration: {formatDuration(Math.round(recording.duration || 0))}
+            {formattedTime}
           </p>
         </div>
 
-        <div className="flex gap-2 mb-4">
-          <TabButton
-            tab="transcription"
-            label="Transcription"
-            activeTab={activeTab}
-            onClick={setActiveTab}
-            effectiveTheme={effectiveTheme}
-          />
-          <TabButton
-            tab="summary"
-            label="Summary"
-            activeTab={activeTab}
-            onClick={setActiveTab}
-            effectiveTheme={effectiveTheme}
-          />
-          <TabButton
-            tab="actionItems"
-            label="Action Items"
-            activeTab={activeTab}
-            onClick={setActiveTab}
-            effectiveTheme={effectiveTheme}
-          />
-        </div>
-
-        <div
-          className={`p-4 rounded-lg ${
-            effectiveTheme === 'dark'
-              ? 'bg-app-dark-surface/60'
-              : 'bg-app-light-surface'
-          }`}
-        >
-          {activeTab === 'transcription' && (
-            <div>
-              {transcriptions[recording.path] ? (
-                transcriptions[recording.path].segments.map((segment) => (
-                  <div key={`${segment.start}-${segment.end}`} className="mb-4">
-                    <p
-                      className={`font-medium mb-1 ${
-                        effectiveTheme === 'dark'
-                          ? 'text-app-dark-text-primary'
-                          : 'text-app-light-text-primary'
-                      }`}
-                    >
-                      {segment.speaker}
-                    </p>
-                    <p
-                      className={
-                        effectiveTheme === 'dark'
-                          ? 'text-app-dark-text-secondary'
-                          : 'text-app-light-text-secondary'
-                      }
-                    >
-                      {segment.text}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <div className="py-8 text-center">
-                  <button
-                    type="button"
-                    onClick={() => onTranscribe(recording)}
-                    disabled={isTranscribing[recording.path]}
-                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
-                      effectiveTheme === 'dark'
-                        ? 'bg-app-dark-surface text-app-dark-text-primary hover:bg-app-dark-surface/80'
-                        : 'bg-app-light-surface text-app-light-text-primary hover:bg-app-light-surface/80'
-                    } ${isTranscribing[recording.path] ? 'opacity-50' : ''}`}
-                  >
-                    {isTranscribing[recording.path] ? (
-                      <>
-                        <Loader size={20} className="animate-spin" />
-                        Creating Transcription...
-                      </>
-                    ) : (
-                      <>
-                        <FileText size={20} />
-                        Create Transcription
-                      </>
-                    )}
-                  </button>
+        <div className="mx-[-16px] mb-8">
+          <div
+            className={`px-6 pt-6 pb-3 rounded-xl ${
+              effectiveTheme === 'dark'
+                ? 'bg-app-dark-surface/30'
+                : 'bg-app-light-surface/50'
+            }`}
+          >
+            <div className="flex flex-col gap-2">
+              <div className="relative w-full">
+                <div
+                  className={`h-1.5 rounded-full ${
+                    effectiveTheme === 'dark'
+                      ? 'bg-app-dark-surface/50'
+                      : 'bg-app-light-surface'
+                  }`}
+                >
+                  <div
+                    className="absolute top-0 left-0 h-1.5 rounded-full bg-blue-500"
+                    style={{ width: '0%' }}
+                  />
                 </div>
-              )}
-            </div>
-          )}
-          {activeTab === 'summary' && (
-            <div>
-              {summaries[recording.path] ? (
-                <p
-                  className={
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span
+                  className={`text-xs font-medium ${
                     effectiveTheme === 'dark'
                       ? 'text-app-dark-text-secondary'
                       : 'text-app-light-text-secondary'
-                  }
+                  }`}
                 >
-                  {summaries[recording.path]}
-                </p>
-              ) : (
-                <div className="py-8 text-center">
-                  <button
-                    type="button"
-                    onClick={() => onCreateSummary(recording)}
-                    disabled={isSummarizing[recording.path]}
-                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
-                      effectiveTheme === 'dark'
-                        ? 'bg-app-dark-surface text-app-dark-text-primary hover:bg-app-dark-surface/80'
-                        : 'bg-app-light-surface text-app-light-text-primary hover:bg-app-light-surface/80'
-                    } ${isSummarizing[recording.path] ? 'opacity-50' : ''}`}
-                  >
-                    {isSummarizing[recording.path] ? (
-                      <>
-                        <Loader size={20} className="animate-spin" />
-                        Creating Summary...
-                      </>
-                    ) : (
-                      <>
-                        <FileText size={20} />
-                        Create Summary
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
+                  0:00
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onPlay(recording)}
+                  className={`flex items-center justify-center w-8 h-8 transition-opacity hover:opacity-80 rounded-full ${
+                    effectiveTheme === 'dark'
+                      ? 'bg-app-dark-text-primary/10'
+                      : 'bg-app-light-text-primary/10'
+                  }`}
+                  aria-label="Play recording"
+                >
+                  <Play size={16} className="text-blue-500" />
+                </button>
+                <span
+                  className={`text-xs font-medium ${
+                    effectiveTheme === 'dark'
+                      ? 'text-app-dark-text-secondary'
+                      : 'text-app-light-text-secondary'
+                  }`}
+                >
+                  {formatDuration(Math.round(recording.duration || 0))}
+                </span>
+              </div>
             </div>
-          )}
-          {activeTab === 'actionItems' && (
-            <div>
-              {actionItems[recording.path] ? (
-                <div>
-                  <ul className="pl-5 space-y-2 list-disc">
-                    {actionItems[recording.path]
-                      .split('\n')
-                      .filter(Boolean)
-                      .map((item) => (
-                        <li
-                          key={item.replace(/\s+/g, '-').toLowerCase()}
-                          className={
-                            effectiveTheme === 'dark'
-                              ? 'text-app-dark-text-secondary'
-                              : 'text-app-light-text-secondary'
-                          }
-                        >
-                          {item}
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-              ) : (
-                <div className="py-8 text-center">
-                  <button
-                    type="button"
-                    onClick={() => onCreateActionItems(recording)}
-                    disabled={isGeneratingActionItems[recording.path]}
-                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
-                      effectiveTheme === 'dark'
-                        ? 'bg-app-dark-surface text-app-dark-text-primary hover:bg-app-dark-surface/80'
-                        : 'bg-app-light-surface text-app-light-text-primary hover:bg-app-light-surface/80'
-                    } ${isGeneratingActionItems[recording.path] ? 'opacity-50' : ''}`}
-                  >
-                    {isGeneratingActionItems[recording.path] ? (
-                      <>
-                        <Loader size={20} className="animate-spin" />
-                        Creating Action Items...
-                      </>
-                    ) : (
-                      <>
-                        <FileText size={20} />
-                        Create Action Items
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+          </div>
         </div>
+
+        <div className="flex mb-6 space-x-4 border-b border-gray-200 dark:border-gray-700">
+          <button
+            type="button"
+            className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 -mb-px ${
+              activeTab === 'my-notes'
+                ? 'border-blue-500 text-blue-500'
+                : 'border-transparent hover:border-gray-300 dark:hover:border-gray-600'
+            } ${
+              effectiveTheme === 'dark'
+                ? 'text-app-dark-text-primary'
+                : 'text-app-light-text-primary'
+            }`}
+            onClick={() => setActiveTab('my-notes')}
+          >
+            My Notes
+          </button>
+          <button
+            type="button"
+            className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 -mb-px ${
+              activeTab === 'summary'
+                ? 'border-blue-500 text-blue-500'
+                : 'border-transparent hover:border-gray-300 dark:hover:border-gray-600'
+            } ${
+              effectiveTheme === 'dark'
+                ? 'text-app-dark-text-primary'
+                : 'text-app-light-text-primary'
+            }`}
+            onClick={() => setActiveTab('summary')}
+          >
+            Summary
+          </button>
+        </div>
+
+        {(() => {
+          if (activeTab === 'my-notes') {
+            return (
+              <div className="min-h-[200px]">
+                <p className="text-sm text-center text-gray-500 dark:text-gray-400">
+                  Coming soon...
+                </p>
+              </div>
+            );
+          }
+
+          if (meetingNotes[recording.path]) {
+            return (
+              <div>
+                <div
+                  className={`prose prose-sm max-w-none leading-relaxed ${
+                    effectiveTheme === 'dark'
+                      ? 'text-app-dark-text-secondary prose-headings:text-app-dark-text-primary prose-strong:text-app-dark-text-primary prose-li:text-app-dark-text-secondary'
+                      : 'text-app-light-text-secondary prose-headings:text-app-light-text-primary prose-strong:text-app-light-text-primary prose-li:text-app-light-text-secondary'
+                  }`}
+                >
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={MarkdownComponents}
+                  >
+                    {meetingNotes[recording.path]}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="py-8 text-center">
+              <button
+                type="button"
+                onClick={() => onGenerateNotes(recording)}
+                disabled={isGeneratingNotes[recording.path]}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                  effectiveTheme === 'dark'
+                    ? 'bg-app-dark-surface text-app-dark-text-primary hover:bg-app-dark-surface/80'
+                    : 'bg-app-light-surface text-app-light-text-primary hover:bg-app-light-surface/80'
+                } ${isGeneratingNotes[recording.path] ? 'opacity-50' : ''}`}
+              >
+                {isGeneratingNotes[recording.path] ? (
+                  <>
+                    <Loader size={20} className="animate-spin" />
+                    Generating Notes...
+                  </>
+                ) : (
+                  <>
+                    <FileText size={20} />
+                    Generate Notes
+                  </>
+                )}
+              </button>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

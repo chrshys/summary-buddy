@@ -1,6 +1,7 @@
 import { promisify } from 'util';
 import { exec, spawn } from 'child_process';
 import { app, systemPreferences } from 'electron';
+import * as fs from 'fs';
 
 const execAsync = promisify(exec);
 
@@ -73,10 +74,65 @@ export default class CoreAudioRecorder implements CoreAudioRecorder {
         };
       }
 
-      // Start recording using sox
-      const command = `sox -d -t mp3 -c 2 -r 44100 "${outputPath}"`;
-      this.currentProcess = exec(command);
+      // Start recording using sox with different encoding parameters
+      const command = `sox -d -t mp3 -C 192 -b 16 "${outputPath}"`;
+      this.currentProcess = exec(command, { maxBuffer: 1024 * 1024 * 100 });
       this.isRecording = true;
+
+      // Monitor file size and handle potential issues
+      const sizeCheckInterval = setInterval(async () => {
+        try {
+          const stats = await fs.promises.stat(outputPath);
+          const sizeMB = stats.size / (1024 * 1024);
+          console.log(`Recording file size: ${sizeMB.toFixed(2)} MB`);
+
+          // If we're approaching the problematic size, start a new segment
+          if (sizeMB > 25) {
+            console.log('File size approaching limit, creating new segment...');
+            const currentPath = this.currentRecordingPath;
+            const basePath = currentPath.replace(/\.mp3$/, '');
+            const timestamp = Date.now();
+            const newPath = `${basePath}_${timestamp}.mp3`;
+
+            // Start new recording before stopping old one to avoid gaps
+            const newRecorder = new CoreAudioRecorder();
+            await newRecorder.startRecording(newPath);
+
+            // Stop the current recording after small delay to ensure overlap
+            setTimeout(() => {
+              this.stopRecording();
+              this.currentProcess = newRecorder.currentProcess;
+              this.monitorProcess = newRecorder.monitorProcess;
+              this.currentRecordingPath = newPath;
+            }, 500);
+          }
+        } catch (error) {
+          console.error('Error checking file size:', error);
+        }
+      }, 1000);
+
+      // Handle potential errors with more detail
+      this.currentProcess.stderr?.on('data', (data: string) => {
+        console.error('Recording error (detailed):', {
+          error: data,
+          command,
+          outputPath,
+          timestamp: new Date().toISOString(),
+          processState: this.isRecording ? 'recording' : 'stopped'
+        });
+      });
+
+      this.currentProcess.on('exit', (code: number, signal: string) => {
+        clearInterval(sizeCheckInterval);
+        console.log('Sox process exited:', { code, signal, isRecording: this.isRecording });
+        if (code !== 0 && this.isRecording) {
+          // Process died unexpectedly while we thought we were recording
+          console.error('Sox process died unexpectedly');
+          // Attempt to restart recording
+          const newPath = this.currentRecordingPath.replace(/\.mp3$/, '_recovered.mp3');
+          this.startRecording(newPath).catch(console.error);
+        }
+      });
 
       // Start monitoring audio levels using sox with a different approach
       this.monitorProcess = spawn('sox', [
@@ -110,11 +166,6 @@ export default class CoreAudioRecorder implements CoreAudioRecorder {
             }
           }
         }
-      });
-
-      // Handle potential errors
-      this.currentProcess.stderr?.on('data', (data: string) => {
-        console.error('Recording error:', data);
       });
 
       this.currentRecordingPath = outputPath;

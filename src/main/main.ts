@@ -390,18 +390,25 @@ ipcMain.handle('set-always-on-top', async (_event, shouldPin: boolean) => {
   }
 });
 
-// Audio recording handlers
+// Add this helper function near the top with other utility functions
+async function createRecordingFolder(timestamp: number): Promise<string> {
+  const recordingsDir = await getRecordingsPath();
+  const folderName = `recording-${timestamp}`;
+  const folderPath = path.join(recordingsDir, folderName);
+  await fsPromises.mkdir(folderPath, { recursive: true });
+  return folderPath;
+}
+
+// Modify the start-recording handler to include timestamp in file name
 ipcMain.handle('start-recording', async () => {
   try {
     if (!audioRecorder) {
       audioRecorder = new CoreAudioRecorder();
     }
 
-    const recordingsDir = await getRecordingsPath();
-    await fsPromises.mkdir(recordingsDir, { recursive: true });
-
     const timestamp = Date.now();
-    const outputPath = path.join(recordingsDir, `recording-${timestamp}.mp3`);
+    const folderPath = await createRecordingFolder(timestamp);
+    const outputPath = path.join(folderPath, `recording-${timestamp}.mp3`);
 
     // Start tracking metadata
     RecordingMetadataStore.startRecording(outputPath);
@@ -413,7 +420,7 @@ ipcMain.handle('start-recording', async () => {
 
     // Send initial recording info to renderer
     mainWindow?.webContents.send('recording-started', {
-      name: path.basename(outputPath),
+      name: path.basename(folderPath),
       path: outputPath,
       date: new Date().toISOString(),
       duration: 0,
@@ -490,7 +497,47 @@ async function getRecordingDuration(filePath: string): Promise<number> {
   }
 }
 
-// Modify the stop-recording handler to save duration
+// Add this helper function for metadata operations
+async function updateRecordingMetadata(
+  folderPath: string,
+  updates: Partial<{
+    title: string;
+    duration: number;
+    transcriptionId?: string;
+    lastModified: string;
+  }>,
+) {
+  try {
+    const metadataPath = path.join(folderPath, 'metadata.json');
+    let metadata = {};
+
+    // Try to read existing metadata
+    try {
+      const existingMetadata = await fsPromises.readFile(metadataPath, 'utf8');
+      metadata = JSON.parse(existingMetadata);
+    } catch (error) {
+      // If file doesn't exist or is invalid, start with empty metadata
+    }
+
+    // Update metadata with new values
+    metadata = {
+      ...metadata,
+      ...updates,
+      lastModified: new Date().toISOString(),
+    };
+
+    await fsPromises.writeFile(metadataPath, JSON.stringify(metadata, null, 2));
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating metadata:', error);
+    return {
+      error:
+        error instanceof Error ? error.message : 'Failed to update metadata',
+    };
+  }
+}
+
+// Update the stop-recording handler to use the new metadata structure
 ipcMain.handle('stop-recording', async () => {
   try {
     if (!audioRecorder) {
@@ -503,26 +550,23 @@ ipcMain.handle('stop-recording', async () => {
     }
 
     const recordingPath = audioRecorder.getCurrentRecordingPath();
+    const folderPath = path.dirname(recordingPath);
     const duration = Math.floor(
       (Date.now() - RecordingMetadataStore.getStartTime(recordingPath)) / 1000,
     );
 
-    // If duration is 0, delete the recording
+    // If duration is 0, delete the recording folder
     if (duration === 0) {
       try {
-        await fsPromises.unlink(recordingPath);
+        await fsPromises.rm(folderPath, { recursive: true });
         return { success: true, duration: 0 };
       } catch (err) {
         console.error('Error deleting zero-duration recording:', err);
-        // Continue with normal flow if deletion fails
       }
     }
 
     // Save duration metadata
-    await fsPromises.writeFile(
-      `${recordingPath}.meta`,
-      JSON.stringify({ duration }, null, 2),
-    );
+    await updateRecordingMetadata(folderPath, { duration });
 
     if (audioLevelInterval) {
       clearInterval(audioLevelInterval);
@@ -594,25 +638,35 @@ ipcMain.handle('open-recordings-folder', async () => {
   await shell.openPath(recordingsDir);
 });
 
-// Add cleanup function for old recordings (older than 7 days)
+// Update cleanup function for old recordings (older than 7 days)
 async function cleanupOldRecordings() {
   try {
     const recordingsDir = await getRecordingsPath();
-    const files = await fsPromises.readdir(recordingsDir);
+    const folders = await fsPromises.readdir(recordingsDir);
     const now = Date.now();
     const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
 
     await Promise.all(
-      files
-        .filter((file) => file.endsWith('.mp3'))
-        .map(async (file) => {
-          const filePath = path.join(recordingsDir, file);
-          const stats = await fsPromises.stat(filePath);
-          const age = now - stats.mtimeMs;
+      folders
+        .filter((folder) => folder.startsWith('recording-'))
+        .map(async (folder) => {
+          try {
+            const folderPath = path.join(recordingsDir, folder);
+            const stats = await fsPromises.stat(folderPath);
 
-          if (age > maxAge) {
-            await fsPromises.unlink(filePath);
-            console.log(`Deleted old recording: ${file}`);
+            // Skip if not a directory
+            if (!stats.isDirectory()) {
+              return;
+            }
+
+            const age = now - stats.mtimeMs;
+
+            if (age > maxAge) {
+              await fsPromises.rm(folderPath, { recursive: true });
+              console.log(`Deleted old recording folder: ${folder}`);
+            }
+          } catch (err) {
+            console.error(`Error processing folder ${folder}:`, err);
           }
         }),
     );
@@ -621,10 +675,65 @@ async function cleanupOldRecordings() {
   }
 }
 
-// Run cleanup on app start and every 24 hours
+// Add migration code for existing recordings
+async function migrateExistingRecordings() {
+  try {
+    const recordingsDir = await getRecordingsPath();
+    const files = await fsPromises.readdir(recordingsDir);
+
+    // Find all .mp3 files that aren't in a recording folder
+    const oldRecordings = files.filter(
+      (file) =>
+        file.endsWith('.mp3') &&
+        file.startsWith('recording-') &&
+        !file.includes(path.sep),
+    );
+
+    await Promise.all(
+      oldRecordings.map(async (oldFile) => {
+        try {
+          const oldPath = path.join(recordingsDir, oldFile);
+          const timestamp = oldFile.match(/recording-(\d+)\.mp3$/)?.[1];
+
+          if (!timestamp) {
+            return;
+          }
+
+          // Create new folder
+          const folderPath = await createRecordingFolder(
+            parseInt(timestamp, 10),
+          );
+          const newPath = path.join(folderPath, `recording-${timestamp}.mp3`);
+
+          // Move recording file
+          await fsPromises.rename(oldPath, newPath);
+
+          // Move metadata if it exists
+          const oldMetaPath = `${oldPath}.meta`;
+          if (existsSync(oldMetaPath)) {
+            const metadata = JSON.parse(
+              await fsPromises.readFile(oldMetaPath, 'utf8'),
+            );
+            await updateRecordingMetadata(folderPath, metadata);
+            await fsPromises.unlink(oldMetaPath);
+          }
+
+          console.log(`Migrated recording: ${oldFile}`);
+        } catch (err) {
+          console.error(`Failed to migrate recording ${oldFile}:`, err);
+        }
+      }),
+    );
+  } catch (error) {
+    console.error('Error during migration:', error);
+  }
+}
+
+// Add migration to app startup
 app
   .whenReady()
-  .then(() => {
+  .then(async () => {
+    await migrateExistingRecordings();
     cleanupOldRecordings();
     setInterval(cleanupOldRecordings, 24 * 60 * 60 * 1000);
     createWindow();
@@ -685,41 +794,66 @@ ipcMain.handle('get-system-audio-source', async () => {
   }
 });
 
-// Modify the list-recordings handler to include actual durations
+// Modify the list-recordings handler to look for timestamped files
 ipcMain.handle('list-recordings', async () => {
   try {
     const recordingsDir = await getRecordingsPath();
-    const files = await fsPromises.readdir(recordingsDir);
+    const folders = await fsPromises.readdir(recordingsDir);
     const recordings = await Promise.all(
-      files
-        .filter((file) => file.endsWith('.mp3'))
-        .map(async (file) => {
-          const filePath = path.join(recordingsDir, file);
-          const stats = await fsPromises.stat(filePath);
-          const match = file.match(/recording-(\d+)\.mp3$/);
-          const timestamp = match ? parseInt(match[1], 10) : stats.mtimeMs;
-          const duration = await getRecordingDuration(filePath);
+      folders
+        .filter((folder) => folder.startsWith('recording-'))
+        .map(async (folder) => {
+          const folderPath = path.join(recordingsDir, folder);
+          const stats = await fsPromises.stat(folderPath);
+          if (!stats.isDirectory()) return null;
 
-          // If duration is 0, delete the recording and its metadata
+          const folderTimestamp = folder.match(/recording-(\d+)$/)?.[1];
+          if (!folderTimestamp) return null;
+
+          const recordingPath = path.join(
+            folderPath,
+            `recording-${folderTimestamp}.mp3`,
+          );
+          if (!existsSync(recordingPath)) return null;
+
+          const recordingStats = await fsPromises.stat(recordingPath);
+          const match = folder.match(/recording-(\d+)$/);
+          const timestamp = match
+            ? parseInt(match[1], 10)
+            : recordingStats.mtimeMs;
+          const duration = await getRecordingDuration(recordingPath);
+
+          // If duration is 0, delete the folder and its contents
           if (duration === 0) {
             try {
-              await fsPromises.unlink(filePath);
-              const metaPath = `${filePath}.meta`;
-              await fsPromises.unlink(metaPath).catch(() => {}); // Ignore if meta file doesn't exist
+              await fsPromises.rm(folderPath, { recursive: true });
               return null;
             } catch (err) {
               console.error(
-                `Failed to delete zero-duration recording: ${filePath}`,
+                `Failed to delete zero-duration recording folder: ${folderPath}`,
                 err,
               );
             }
           }
 
+          // Try to read custom title from metadata
+          let customTitle = null;
+          try {
+            const metadataPath = path.join(folderPath, 'metadata.json');
+            const metadata = JSON.parse(
+              await fsPromises.readFile(metadataPath, 'utf8'),
+            );
+            customTitle = metadata.title || null;
+          } catch (err) {
+            // Ignore metadata read errors
+          }
+
           return {
-            name: file,
-            path: filePath,
+            name: folder,
+            path: recordingPath,
             date: new Date(timestamp).toISOString(),
             duration,
+            title: customTitle,
           };
         }),
     );
@@ -729,7 +863,6 @@ ipcMain.handle('list-recordings', async () => {
       .filter((rec): rec is NonNullable<typeof rec> => rec !== null)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    console.log('Returning recordings:', validRecordings);
     return { recordings: validRecordings };
   } catch (error) {
     console.error('Error listing recordings:', error);
@@ -755,17 +888,20 @@ ipcMain.handle('play-recording', async (_, filePath: string) => {
   }
 });
 
-// Add delete recording handler
+// Update delete recording handler to remove the entire folder
 ipcMain.handle('delete-recording', async (_, filePath: string) => {
   try {
-    await fsPromises.unlink(filePath);
-    // Also delete metadata file if it exists
-    try {
-      await fsPromises.unlink(`${filePath}.meta`);
-    } catch (metaError) {
-      // Ignore error if metadata file doesn't exist
-      console.log('No metadata file found to delete');
+    // Get the folder path from the recording file path
+    const folderPath = path.dirname(filePath);
+
+    // Verify this is a recording folder before deleting
+    if (!path.basename(folderPath).startsWith('recording-')) {
+      return { error: 'Invalid recording path' };
     }
+
+    // Delete the entire folder and its contents
+    await fsPromises.rm(folderPath, { recursive: true });
+
     return { success: true };
   } catch (error) {
     console.error('Error deleting recording:', error);
@@ -776,7 +912,7 @@ ipcMain.handle('delete-recording', async (_, filePath: string) => {
   }
 });
 
-// Add transcription handler
+// Modify the transcribe-recording handler to include timestamp in file name
 ipcMain.handle('transcribe-recording', async (_, filePath: string) => {
   try {
     // Get API keys from config
@@ -794,6 +930,20 @@ ipcMain.handle('transcribe-recording', async (_, filePath: string) => {
       diarizationService = new DiarizationService(config.assemblyaiApiKey);
     }
 
+    // Get timestamp from folder name
+    const folderName = path.basename(path.dirname(filePath));
+    const timestamp = folderName.match(/recording-(\d+)$/)?.[1];
+
+    if (!timestamp) {
+      return { error: 'Invalid recording folder structure' };
+    }
+
+    const folderPath = path.dirname(filePath);
+    const transcriptionPath = path.join(
+      folderPath,
+      `transcript-${timestamp}.txt`,
+    );
+
     // Transcribe the audio with speaker diarization
     const result = await diarizationService.transcribeAudio(filePath);
 
@@ -801,13 +951,11 @@ ipcMain.handle('transcribe-recording', async (_, filePath: string) => {
       return { error: result.error };
     }
 
-    // Format the transcription with speaker labels
+    // Format and save the transcription
     const formattedTranscript = result.segments
       .map((segment) => `[${segment.speaker}]: ${segment.text}`)
       .join('\n');
 
-    // Save transcription alongside the audio file
-    const transcriptionPath = `${filePath}.txt`;
     await fsPromises.writeFile(transcriptionPath, formattedTranscript);
 
     return {
@@ -826,94 +974,67 @@ ipcMain.handle('transcribe-recording', async (_, filePath: string) => {
   }
 });
 
-// Add summary handler
+// Modify the create-summary handler to include timestamp in file names
 ipcMain.handle('create-summary', async (_, filePath: string) => {
   try {
     // Get API keys from config
     const configPath = path.join(app.getPath('userData'), 'config.json');
     const config = JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
 
-    if (!config.openaiApiKey) {
+    if (!config.assemblyaiApiKey) {
       return {
-        error: 'OpenAI API key not found. Please add it in settings.',
+        error: 'AssemblyAI API key not found. Please add it in settings.',
       };
     }
 
-    // First get the transcription
+    // Initialize diarization service if needed
     if (!diarizationService) {
       diarizationService = new DiarizationService(config.assemblyaiApiKey);
     }
 
-    // Check if transcription exists
-    const transcriptionPath = `${filePath}.txt`;
-    let transcription;
-    try {
-      transcription = await fsPromises.readFile(transcriptionPath, 'utf8');
-    } catch (err) {
-      // If transcription doesn't exist, create it
-      const result = await diarizationService.transcribeAudio(filePath);
-      if (result.error) {
-        return { error: result.error };
-      }
-      transcription = result.segments
-        .map((segment) => `[${segment.speaker}]: ${segment.text}`)
-        .join('\n');
-      await fsPromises.writeFile(transcriptionPath, transcription);
+    // Ensure diarizationService is initialized
+    if (!diarizationService) {
+      return { error: 'Failed to initialize diarization service' };
     }
 
-    // Use OpenAI to generate summary
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.openaiApiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are a helpful assistant that creates concise summaries of conversations.',
-          },
-          {
-            role: 'user',
-            content: `Please provide a concise summary of this conversation:\n\n${transcription}`,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
-      }),
-    });
+    // Get timestamp from folder name
+    const folderName = path.basename(path.dirname(filePath));
+    const timestamp = folderName.match(/recording-(\d+)$/)?.[1];
 
-    if (!response.ok) {
-      const error = await response.json();
-      return { error: error.error?.message || 'Failed to generate summary' };
+    if (!timestamp) {
+      return { error: 'Invalid recording folder structure' };
     }
 
-    const data = await response.json();
-    const summary = data.choices[0].message.content;
+    const folderPath = path.dirname(filePath);
+    const notesPath = path.join(folderPath, `notes-${timestamp}.txt`);
 
-    // Save summary alongside the audio file
-    const summaryPath = `${filePath}.summary.txt`;
-    await fsPromises.writeFile(summaryPath, summary);
+    // Generate notes
+    const result = await diarizationService.createSummary(filePath);
+    if (result.error) {
+      return { error: result.error };
+    }
+
+    // Save notes
+    if (result.notes) {
+      await fsPromises.writeFile(notesPath, result.notes);
+    }
 
     return {
       success: true,
-      summary,
+      notes: result.notes,
     };
   } catch (error) {
-    console.error('Error generating summary:', error);
+    console.error('Error generating notes:', error);
     return {
       error:
         error instanceof Error
           ? error.message
-          : 'Unknown error during summary generation',
+          : 'Unknown error during notes generation',
     };
   }
 });
 
-// Add action items handler
+// Update the create-action-items handler to use notes
 ipcMain.handle('create-action-items', async (_, filePath: string) => {
   try {
     // Get API keys from config
@@ -931,30 +1052,30 @@ ipcMain.handle('create-action-items', async (_, filePath: string) => {
       diarizationService = new DiarizationService(config.assemblyaiApiKey);
     }
 
-    // Generate action items
-    const result = await diarizationService.createActionItems(filePath);
-    console.log('Action items result:', result); // Add logging
+    // Generate notes using the combined summary method
+    const result = await diarizationService.createSummary(filePath);
+    console.log('Notes result:', result);
 
     if (result.error) {
-      console.error('Action items error:', result.error); // Add error logging
+      console.error('Notes error:', result.error);
       return { error: result.error };
     }
 
-    // Save action items alongside the audio file
-    const actionItemsPath = `${filePath}.actions.txt`;
-    await fsPromises.writeFile(actionItemsPath, result.actionItems || '');
+    // Save notes alongside the audio file
+    const notesPath = `${filePath}.notes.txt`;
+    await fsPromises.writeFile(notesPath, result.notes || '');
 
     return {
       success: true,
-      actionItems: result.actionItems,
+      notes: result.notes,
     };
   } catch (error) {
-    console.error('Error generating action items:', error);
+    console.error('Error generating notes:', error);
     return {
       error:
         error instanceof Error
           ? error.message
-          : 'Unknown error generating action items',
+          : 'Unknown error generating notes',
     };
   }
 });
@@ -978,3 +1099,25 @@ ipcMain.handle('read-file', async (_, filePath: string) => {
     throw error;
   }
 });
+
+// Update the update-recording-title handler
+ipcMain.handle(
+  'update-recording-title',
+  async (
+    _,
+    { path: recordingPath, title }: { path: string; title: string },
+  ) => {
+    try {
+      const folderPath = path.dirname(recordingPath);
+      return await updateRecordingMetadata(folderPath, { title });
+    } catch (error) {
+      console.error('Error updating recording title:', error);
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error updating title',
+      };
+    }
+  },
+);

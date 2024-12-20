@@ -11,3 +11,18 @@ export function resolveHtmlPath(htmlFileName: string) {
   }
   return `file://${path.resolve(__dirname, '../renderer/', htmlFileName)}`;
 }
+
+export const getFilePathsForRecording = (recordingPath: string) => {
+  const folderPath = path.dirname(recordingPath);
+  const timestamp = path.basename(folderPath).match(/recording-(\d+)$/)?.[1];
+
+  if (!timestamp) {
+    return null;
+  }
+
+  return {
+    transcriptPath: path.join(folderPath, `transcript-${timestamp}.txt`),
+    summaryPath: path.join(folderPath, `summary-${timestamp}.txt`),
+    actionItemsPath: path.join(folderPath, `actions-${timestamp}.txt`),
+  };
+};

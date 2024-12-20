@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, Routes, Route } from 'react-router-dom';
-import { Settings, Pin, Folder } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate, Routes, Route, useLocation } from 'react-router-dom';
+import { Settings, Pin, Folder, ArrowLeft } from 'lucide-react';
 import RecordButton from './RecordButton';
 import RecordingsList from './RecordingsList';
 import RecordingView from './RecordingView';
-import { Recording } from '../types/recording';
+import type { Recording } from '../types/recording';
+import type { DiarizedSegment } from '../../main/services/diarization';
 import { useTheme } from '../contexts/ThemeContext';
 import { resolveTheme } from '../utils/theme';
-import type { DiarizedSegment } from '../../main/services/diarization';
 
 // Add formatTime utility function
 
@@ -21,8 +21,9 @@ function getButtonClasses(isPinned: boolean, theme: 'light' | 'dark'): string {
     : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100';
 }
 
-function MainView() {
+export default function MainView() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme } = useTheme();
   const resolvedTheme = resolveTheme(theme);
   const [isRecording, setIsRecording] = useState(false);
@@ -37,12 +38,8 @@ function MainView() {
   const [isTranscribing, setIsTranscribing] = useState<Record<string, boolean>>(
     {},
   );
-  const [summaries, setSummaries] = useState<Record<string, string>>({});
-  const [isSummarizing, setIsSummarizing] = useState<Record<string, boolean>>(
-    {},
-  );
-  const [actionItems, setActionItems] = useState<Record<string, string>>({});
-  const [isGeneratingActionItems, setIsGeneratingActionItems] = useState<
+  const [meetingNotes, setMeetingNotes] = useState<Record<string, string>>({});
+  const [isGeneratingNotes, setIsGeneratingNotes] = useState<
     Record<string, boolean>
   >({});
 
@@ -52,7 +49,14 @@ function MainView() {
     if (isRecording) {
       setElapsedTime(0);
       intervalId = setInterval(() => {
-        setElapsedTime((prev) => prev + 1);
+        setElapsedTime((prev) => {
+          if (prev === 1500) {
+            setError(
+              'Recording will automatically stop in 3 minutes due to size limitations',
+            );
+          }
+          return prev + 1;
+        });
       }, 1000);
     }
 
@@ -123,10 +127,10 @@ function MainView() {
 
     const recordingStoppedUnsubscribe = window.electron.ipcRenderer.on(
       'recording-stopped',
-      ({ path }) => {
+      ({ path: recordingPath }) => {
         setRecordings((prev) =>
           prev.map((rec) =>
-            rec.path === path ? { ...rec, isActive: false } : rec,
+            rec.path === recordingPath ? { ...rec, isActive: false } : rec,
           ),
         );
       },
@@ -240,7 +244,7 @@ function MainView() {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
-  const handleTranscribe = async (recording: Recording): Promise<void> => {
+  const handleTranscribe = async (recording: Recording) => {
     try {
       setIsTranscribing({ ...isTranscribing, [recording.path]: true });
       const result = await window.electron.audioRecorder.transcribeRecording(
@@ -256,70 +260,131 @@ function MainView() {
         });
       }
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to transcribe recording';
-      setError(errorMessage);
+      setError(
+        typeof err === 'string' ? err : 'Failed to transcribe recording',
+      );
     } finally {
       setIsTranscribing({ ...isTranscribing, [recording.path]: false });
     }
   };
 
-  const handleCreateSummary = async (recording: Recording): Promise<void> => {
+  const handleGenerateNotes = async (recording: Recording) => {
     try {
-      setIsSummarizing({ ...isSummarizing, [recording.path]: true });
-      const result = await window.electron.audioRecorder.createSummary(
-        recording.path,
-      );
-
-      if (result.error) {
-        setError(result.error);
-      } else if (result.summary) {
-        setSummaries({
-          ...summaries,
-          [recording.path]: result.summary,
-        });
-      }
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to create summary';
-      setError(errorMessage);
-    } finally {
-      setIsSummarizing({ ...isSummarizing, [recording.path]: false });
-    }
-  };
-
-  const handleCreateActionItems = async (
-    recording: Recording,
-  ): Promise<void> => {
-    try {
-      setIsGeneratingActionItems({
-        ...isGeneratingActionItems,
+      setIsGeneratingNotes((prev) => ({
+        ...prev,
         [recording.path]: true,
-      });
+      }));
 
-      const result = await window.electron.audioRecorder.createActionItems(
-        recording.path,
-      );
-
+      const result = await window.electron.createSummary(recording.path);
       if (result.error) {
-        setError(result.error);
-      } else if (result.actionItems) {
-        setActionItems({
-          ...actionItems,
-          [recording.path]: result.actionItems,
-        });
+        console.error('Error generating notes:', result.error);
+        return;
+      }
+
+      if (result.notes) {
+        setMeetingNotes((prev) => ({
+          ...prev,
+          [recording.path]: result.notes!,
+        }));
       }
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to generate action items';
-      setError(errorMessage);
+      console.error('Error generating notes:', err);
     } finally {
-      setIsGeneratingActionItems({
-        ...isGeneratingActionItems,
+      setIsGeneratingNotes((prev) => ({
+        ...prev,
         [recording.path]: false,
-      });
+      }));
     }
   };
+
+  const handleUpdateTitle = useCallback(
+    async (recording: Recording, newTitle: string) => {
+      try {
+        // Update the recording title in the recordings array
+        const updatedRecordings = recordings.map((r) =>
+          r.path === recording.path ? { ...r, title: newTitle } : r,
+        );
+        setRecordings(updatedRecordings);
+
+        // Save the updated title to the metadata file
+        await window.electron.audioRecorder.updateRecordingTitle(
+          recording.path,
+          newTitle,
+        );
+      } catch (err) {
+        // Revert the title change in case of error
+        setRecordings(recordings);
+        setError('Failed to update recording title');
+      }
+    },
+    [recordings],
+  );
+
+  const renderTitleBar = () => {
+    if (location.pathname.startsWith('/recording/')) {
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className={`p-1.5 mr-2 transition-colors rounded-md ${
+              resolvedTheme === 'dark'
+                ? 'text-neutral-400 hover:text-white hover:bg-neutral-700/50'
+                : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
+            }`}
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div
+            className={`text-sm font-medium ${
+              resolvedTheme === 'dark' ? 'text-neutral-400' : 'text-neutral-600'
+            }`}
+          >
+            Recording Details
+          </div>
+        </>
+      );
+    }
+
+    return (
+      <div
+        className={`text-sm font-medium ${
+          resolvedTheme === 'dark' ? 'text-neutral-400' : 'text-neutral-600'
+        }`}
+      >
+        Summary Buddy
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    const recordingErrorUnsubscribe = window.electron.ipcRenderer.on(
+      'recording-error',
+      (errorMessage: string) => {
+        setError(errorMessage);
+        setIsRecording(false);
+        setElapsedTime(0);
+      },
+    );
+
+    return () => {
+      recordingErrorUnsubscribe();
+    };
+  }, []);
+
+  // Add useEffect to listen for generated notes
+  useEffect(() => {
+    window.electron.onNotesGenerated(({ path, notes }) => {
+      setMeetingNotes((prev) => ({
+        ...prev,
+        [path]: notes,
+      }));
+      setIsGeneratingNotes((prev) => ({
+        ...prev,
+        [path]: false,
+      }));
+    });
+  }, []);
 
   return (
     <div
@@ -336,13 +401,7 @@ function MainView() {
             : 'bg-white/50 border-neutral-200'
         } window-drag`}
       >
-        <div
-          className={`text-sm font-medium ${
-            resolvedTheme === 'dark' ? 'text-neutral-400' : 'text-neutral-600'
-          }`}
-        >
-          Summary Buddy
-        </div>
+        <div className="flex items-center">{renderTitleBar()}</div>
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -415,15 +474,10 @@ function MainView() {
             <RecordingView
               recordings={recordings}
               onPlay={handlePlayRecording}
-              onTranscribe={handleTranscribe}
-              onCreateSummary={handleCreateSummary}
-              onCreateActionItems={handleCreateActionItems}
-              isTranscribing={isTranscribing}
-              isSummarizing={isSummarizing}
-              isGeneratingActionItems={isGeneratingActionItems}
-              transcriptions={transcriptions}
-              summaries={summaries}
-              actionItems={actionItems}
+              onGenerateNotes={handleGenerateNotes}
+              onUpdateTitle={handleUpdateTitle}
+              isGeneratingNotes={isGeneratingNotes}
+              meetingNotes={meetingNotes}
             />
           }
         />
@@ -431,5 +485,3 @@ function MainView() {
     </div>
   );
 }
-
-export default MainView;

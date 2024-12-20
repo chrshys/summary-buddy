@@ -57,10 +57,23 @@ const electronHandler = {
     createSummary: (path: string) => ipcRenderer.invoke('create-summary', path),
     createActionItems: (path: string) =>
       ipcRenderer.invoke('create-action-items', path),
+    updateRecordingTitle: (path: string, title: string) =>
+      ipcRenderer.invoke('update-recording-title', { path, title }),
+    getRecordingPaths: (recordingPath: string) =>
+      ipcRenderer.invoke('get-recording-paths', recordingPath),
   },
   fileSystem: {
     exists: (filePath: string) => ipcRenderer.invoke('file-exists', filePath),
     readFile: (filePath: string) => ipcRenderer.invoke('read-file', filePath),
+  },
+  createSummary: async (filePath: string) => {
+    const result = await ipcRenderer.invoke('create-summary', filePath);
+    return result;
+  },
+  onNotesGenerated: (
+    callback: (data: { path: string; notes: string }) => void,
+  ) => {
+    ipcRenderer.on('notes-generated', (_event, data) => callback(data));
   },
 };
 

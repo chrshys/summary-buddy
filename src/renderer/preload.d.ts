@@ -38,11 +38,30 @@ declare global {
         transcribeRecording: (path: string) => Promise<{ success?: boolean; text?: string; error?: string }>;
         createSummary: (path: string) => Promise<{ success?: boolean; summary?: string; error?: string }>;
         createActionItems: (path: string) => Promise<{ success?: boolean; actionItems?: string; error?: string }>;
+        updateRecordingTitle: (
+          path: string,
+          title: string,
+        ) => Promise<{ success?: boolean; error?: string }>;
+        fileExists: (path: string) => Promise<boolean>;
+        getRecordingPaths: (recordingPath: string) => Promise<{
+          transcriptPath: string | null;
+          summaryPath: string | null;
+          actionItemsPath: string | null;
+        }>;
       };
       ipcRenderer: {
-        on(channel: 'recording-started' | 'recording-stopped' | 'audio-level', func: (...args: any[]) => void): () => void;
+        on(
+          channel: 'audio-level' | 'recording-started' | 'recording-stopped' | 'recording-error',
+          func: (...args: any[]) => void,
+        ): () => void;
         // ... other methods
       };
+      createSummary: (filePath: string) => Promise<{
+        success?: boolean;
+        notes?: string;
+        error?: string;
+      }>;
+      onNotesGenerated: (callback: (data: { path: string; notes: string }) => void) => void;
     };
   }
 }
