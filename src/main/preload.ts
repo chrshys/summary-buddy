@@ -1,0 +1,55 @@
+// Disable no-unused-vars, broken for spread args
+/* eslint no-unused-vars: off */
+import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+
+export type Channels =
+  | 'ipc-example'
+  | 'start-recording'
+  | 'stop-recording'
+  | 'recording-error';
+
+const electronHandler = {
+  ipcRenderer: {
+    sendMessage(channel: Channels, ...args: unknown[]) {
+      ipcRenderer.send(channel, ...args);
+    },
+    on(channel: Channels | 'audio-level', func: (...args: unknown[]) => void) {
+      const subscription = (_event: IpcRendererEvent, ...args: unknown[]) =>
+        func(...args);
+      ipcRenderer.on(channel, subscription);
+
+      return () => {
+        ipcRenderer.removeListener(channel, subscription);
+      };
+    },
+    once(channel: Channels, func: (...args: unknown[]) => void) {
+      ipcRenderer.once(channel, (_event, ...args) => func(...args));
+    },
+    removeListener(channel: Channels | 'audio-level', func: (...args: unknown[]) => void) {
+      ipcRenderer.removeListener(channel, func);
+    },
+    getSystemAudioSource: () =>
+      ipcRenderer.invoke('get-system-audio-source'),
+  },
+  audioRecorder: {
+    startRecording: () => ipcRenderer.invoke('start-recording'),
+    stopRecording: () => ipcRenderer.invoke('stop-recording'),
+    getRecordingsPath: () => ipcRenderer.invoke('get-recordings-path'),
+    openRecordingsFolder: () => ipcRenderer.invoke('open-recordings-folder'),
+    setRecordingsPath: (path: string) =>
+      ipcRenderer.invoke('set-recordings-path', path),
+    browseForFolder: () => ipcRenderer.invoke('browse-for-folder'),
+    getApiKey: () => ipcRenderer.invoke('get-api-key'),
+    setApiKey: (key: string) => ipcRenderer.invoke('set-api-key', key),
+    setAlwaysOnTop: (shouldPin: boolean) =>
+      ipcRenderer.invoke('set-always-on-top', shouldPin),
+    getPinnedState: () => ipcRenderer.invoke('get-pinned-state'),
+    listRecordings: () => ipcRenderer.invoke('list-recordings'),
+    playRecording: (path: string) => ipcRenderer.invoke('play-recording', path),
+    deleteRecording: (path: string) => ipcRenderer.invoke('delete-recording', path),
+  },
+};
+
+contextBridge.exposeInMainWorld('electron', electronHandler);
+
+export type ElectronHandler = typeof electronHandler;
