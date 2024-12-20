@@ -6,7 +6,8 @@ import { useTheme } from '../contexts/ThemeContext';
 export function SettingsView() {
   const navigate = useNavigate();
   const { theme, effectiveTheme, setTheme } = useTheme();
-  const [apiKey, setApiKey] = useState('');
+  const [openAiKey, setOpenAiKey] = useState('');
+  const [assemblyAiKey, setAssemblyAiKey] = useState('');
   const [recordingsPath, setRecordingsPath] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
@@ -14,29 +15,48 @@ export function SettingsView() {
   useEffect(() => {
     Promise.all([
       window.electron.audioRecorder.getRecordingsPath(),
-      window.electron.audioRecorder.getApiKey(),
+      window.electron.audioRecorder.getApiKey('openai'),
+      window.electron.audioRecorder.getApiKey('assemblyai'),
     ])
-      .then(([pathResult, keyResult]) => {
+      .then(([pathResult, openAiResult, assemblyAiResult]) => {
         setRecordingsPath(pathResult.path);
-        if (keyResult.key) setApiKey(keyResult.key);
+        if (openAiResult.key) setOpenAiKey(openAiResult.key);
+        if (assemblyAiResult.key) setAssemblyAiKey(assemblyAiResult.key);
       })
       .catch(() => setError('Failed to load settings'));
   }, []);
 
-  const handleApiKeyChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleOpenAiKeyChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const newKey = e.target.value;
-    setApiKey(newKey);
+    setOpenAiKey(newKey);
 
     try {
-      const result = await window.electron.audioRecorder.setApiKey(newKey);
+      const result = await window.electron.audioRecorder.setApiKey(newKey, 'openai');
       if (result.error) {
         setError(result.error);
       } else {
-        setSaveStatus('API key updated');
+        setSaveStatus('OpenAI API key updated');
         setTimeout(() => setSaveStatus(null), 2000);
       }
     } catch (err) {
-      setError('Failed to save API key');
+      setError('Failed to save OpenAI API key');
+    }
+  };
+
+  const handleAssemblyAiKeyChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newKey = e.target.value;
+    setAssemblyAiKey(newKey);
+
+    try {
+      const result = await window.electron.audioRecorder.setApiKey(newKey, 'assemblyai');
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setSaveStatus('AssemblyAI API key updated');
+        setTimeout(() => setSaveStatus(null), 2000);
+      }
+    } catch (err) {
+      setError('Failed to save AssemblyAI API key');
     }
   };
 
@@ -120,14 +140,39 @@ export function SettingsView() {
               <input
                 type="password"
                 id="openaiApiKey"
-                value={apiKey}
-                onChange={handleApiKeyChange}
+                value={openAiKey}
+                onChange={handleOpenAiKeyChange}
                 className={`w-full mt-1.5 px-2 py-1.5 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
                   effectiveTheme === 'dark'
                     ? 'bg-app-dark-bg border-app-dark-border placeholder-app-dark-text-tertiary'
                     : 'bg-white border-app-light-border placeholder-app-light-text-tertiary'
                 }`}
                 placeholder="sk-..."
+              />
+            </label>
+          </div>
+
+          <div>
+            <label
+              htmlFor="assemblyaiApiKey"
+              className={`block text-xs mb-1.5 ${
+                effectiveTheme === 'dark'
+                  ? 'text-app-dark-text-secondary'
+                  : 'text-app-light-text-secondary'
+              }`}
+            >
+              AssemblyAI API Key
+              <input
+                type="password"
+                id="assemblyaiApiKey"
+                value={assemblyAiKey}
+                onChange={handleAssemblyAiKeyChange}
+                className={`w-full mt-1.5 px-2 py-1.5 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                  effectiveTheme === 'dark'
+                    ? 'bg-app-dark-bg border-app-dark-border placeholder-app-dark-text-tertiary'
+                    : 'bg-white border-app-light-border placeholder-app-light-text-tertiary'
+                }`}
+                placeholder="Your AssemblyAI API key"
               />
             </label>
           </div>

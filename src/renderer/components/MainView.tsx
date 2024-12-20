@@ -7,6 +7,7 @@ import RecordingView from './RecordingView';
 import { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
 import { resolveTheme } from '../utils/theme';
+import type { DiarizedSegment } from '../../main/services/diarization';
 
 // Add formatTime utility function
 
@@ -30,12 +31,20 @@ function MainView() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [recordings, setRecordings] = useState<Recording[]>([]);
-  const [transcriptions, setTranscriptions] = useState<Record<string, string>>(
-    {},
-  );
+  const [transcriptions, setTranscriptions] = useState<
+    Record<string, { segments: DiarizedSegment[] }>
+  >({});
   const [isTranscribing, setIsTranscribing] = useState<Record<string, boolean>>(
     {},
   );
+  const [summaries, setSummaries] = useState<Record<string, string>>({});
+  const [isSummarizing, setIsSummarizing] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [actionItems, setActionItems] = useState<Record<string, string>>({});
+  const [isGeneratingActionItems, setIsGeneratingActionItems] = useState<
+    Record<string, boolean>
+  >({});
 
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval>;
@@ -240,8 +249,11 @@ function MainView() {
 
       if (result.error) {
         setError(result.error);
-      } else if (result.text) {
-        setTranscriptions({ ...transcriptions, [recording.path]: result.text });
+      } else if (result.segments) {
+        setTranscriptions({
+          ...transcriptions,
+          [recording.path]: { segments: result.segments },
+        });
       }
     } catch (err) {
       const errorMessage =
@@ -249,6 +261,63 @@ function MainView() {
       setError(errorMessage);
     } finally {
       setIsTranscribing({ ...isTranscribing, [recording.path]: false });
+    }
+  };
+
+  const handleCreateSummary = async (recording: Recording): Promise<void> => {
+    try {
+      setIsSummarizing({ ...isSummarizing, [recording.path]: true });
+      const result = await window.electron.audioRecorder.createSummary(
+        recording.path,
+      );
+
+      if (result.error) {
+        setError(result.error);
+      } else if (result.summary) {
+        setSummaries({
+          ...summaries,
+          [recording.path]: result.summary,
+        });
+      }
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to create summary';
+      setError(errorMessage);
+    } finally {
+      setIsSummarizing({ ...isSummarizing, [recording.path]: false });
+    }
+  };
+
+  const handleCreateActionItems = async (
+    recording: Recording,
+  ): Promise<void> => {
+    try {
+      setIsGeneratingActionItems({
+        ...isGeneratingActionItems,
+        [recording.path]: true,
+      });
+
+      const result = await window.electron.audioRecorder.createActionItems(
+        recording.path,
+      );
+
+      if (result.error) {
+        setError(result.error);
+      } else if (result.actionItems) {
+        setActionItems({
+          ...actionItems,
+          [recording.path]: result.actionItems,
+        });
+      }
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to generate action items';
+      setError(errorMessage);
+    } finally {
+      setIsGeneratingActionItems({
+        ...isGeneratingActionItems,
+        [recording.path]: false,
+      });
     }
   };
 
@@ -347,8 +416,14 @@ function MainView() {
               recordings={recordings}
               onPlay={handlePlayRecording}
               onTranscribe={handleTranscribe}
+              onCreateSummary={handleCreateSummary}
+              onCreateActionItems={handleCreateActionItems}
               isTranscribing={isTranscribing}
+              isSummarizing={isSummarizing}
+              isGeneratingActionItems={isGeneratingActionItems}
               transcriptions={transcriptions}
+              summaries={summaries}
+              actionItems={actionItems}
             />
           }
         />

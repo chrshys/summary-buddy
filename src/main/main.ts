@@ -28,7 +28,7 @@ import * as mm from 'music-metadata';
 import CoreAudioRecorder from './audio/coreaudio';
 import { resolveHtmlPath } from './util';
 import { RecordingMetadataStore } from './audio/RecordingMetadata';
-import TranscriptionService from './services/transcription';
+import DiarizationService from './services/diarization';
 
 class AppUpdater {
   constructor() {
@@ -46,7 +46,7 @@ let audioLevelInterval: ReturnType<typeof setInterval> | null = null;
 let durationInterval: ReturnType<typeof setInterval> | null = null;
 let normalTrayIcon: NativeImage | null = null;
 let recordingTrayIcon: NativeImage | null = null;
-let transcriptionService: TranscriptionService | null = null;
+let diarizationService: DiarizationService | null = null;
 
 // Move these function declarations to the top, after the variable declarations
 function setRecordingState(isRecording: boolean) {
@@ -334,36 +334,44 @@ async function getRecordingsPath() {
 }
 
 // Get API key
-ipcMain.handle('get-api-key', async () => {
-  try {
-    const configPath = path.join(app.getPath('userData'), 'config.json');
-    if (existsSync(configPath)) {
-      const config = JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
-      return { key: config.apiKey || null };
+ipcMain.handle(
+  'get-api-key',
+  async (_, provider: 'openai' | 'assemblyai' = 'openai') => {
+    try {
+      const configPath = path.join(app.getPath('userData'), 'config.json');
+      if (existsSync(configPath)) {
+        const config = JSON.parse(
+          await fsPromises.readFile(configPath, 'utf8'),
+        );
+        return { key: config[`${provider}ApiKey`] || null };
+      }
+      return { key: null };
+    } catch (error) {
+      console.error('Error reading API key:', error);
+      return { error: 'Failed to read API key' };
     }
-    return { key: null };
-  } catch (error) {
-    console.error('Error reading API key:', error);
-    return { error: 'Failed to read API key' };
-  }
-});
+  },
+);
 
 // Set API key
-ipcMain.handle('set-api-key', async (_, key: string) => {
-  try {
-    const configPath = path.join(app.getPath('userData'), 'config.json');
-    const config = existsSync(configPath)
-      ? JSON.parse(await fsPromises.readFile(configPath, 'utf8'))
-      : {};
+ipcMain.handle(
+  'set-api-key',
+  async (_, key: string, provider: 'openai' | 'assemblyai' = 'openai') => {
+    try {
+      const configPath = path.join(app.getPath('userData'), 'config.json');
+      const config = existsSync(configPath)
+        ? JSON.parse(await fsPromises.readFile(configPath, 'utf8'))
+        : {};
 
-    config.apiKey = key;
-    await fsPromises.writeFile(configPath, JSON.stringify(config, null, 2));
-    return { success: true };
-  } catch (error) {
-    console.error('Error saving API key:', error);
-    return { error: 'Failed to save API key' };
-  }
-});
+      config[`${provider}ApiKey`] = key;
+      await fsPromises.writeFile(configPath, JSON.stringify(config, null, 2));
+      return { success: true };
+    } catch (error) {
+      console.error('Error saving API key:', error);
+      return { error: 'Failed to save API key' };
+    }
+  },
+);
 
 // Add setAlwaysOnTop handler
 ipcMain.handle('set-always-on-top', async (_event, shouldPin: boolean) => {
@@ -771,33 +779,42 @@ ipcMain.handle('delete-recording', async (_, filePath: string) => {
 // Add transcription handler
 ipcMain.handle('transcribe-recording', async (_, filePath: string) => {
   try {
-    // Get API key from config
+    // Get API keys from config
     const configPath = path.join(app.getPath('userData'), 'config.json');
-    const { apiKey } = JSON.parse(
-      await fsPromises.readFile(configPath, 'utf8'),
-    );
+    const config = JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
 
-    if (!apiKey) {
-      return { error: 'OpenAI API key not found. Please add it in settings.' };
+    if (!config.assemblyaiApiKey) {
+      return {
+        error: 'AssemblyAI API key not found. Please add it in settings.',
+      };
     }
 
-    // Initialize transcription service if needed
-    if (!transcriptionService) {
-      transcriptionService = new TranscriptionService(apiKey);
+    // Initialize diarization service if needed
+    if (!diarizationService) {
+      diarizationService = new DiarizationService(config.assemblyaiApiKey);
     }
 
-    // Transcribe the audio
-    const result = await transcriptionService.transcribeAudio(filePath);
+    // Transcribe the audio with speaker diarization
+    const result = await diarizationService.transcribeAudio(filePath);
 
     if (result.error) {
       return { error: result.error };
     }
 
-    // Save transcription alongside the audio file
-    const transcriptionPath = `${filePath}.transcript`;
-    await fsPromises.writeFile(transcriptionPath, result.text);
+    // Format the transcription with speaker labels
+    const formattedTranscript = result.segments
+      .map((segment) => `[${segment.speaker}]: ${segment.text}`)
+      .join('\n');
 
-    return { success: true, text: result.text };
+    // Save transcription alongside the audio file
+    const transcriptionPath = `${filePath}.txt`;
+    await fsPromises.writeFile(transcriptionPath, formattedTranscript);
+
+    return {
+      success: true,
+      text: formattedTranscript,
+      segments: result.segments,
+    };
   } catch (error) {
     console.error('Error during transcription:', error);
     return {
@@ -806,5 +823,158 @@ ipcMain.handle('transcribe-recording', async (_, filePath: string) => {
           ? error.message
           : 'Unknown error during transcription',
     };
+  }
+});
+
+// Add summary handler
+ipcMain.handle('create-summary', async (_, filePath: string) => {
+  try {
+    // Get API keys from config
+    const configPath = path.join(app.getPath('userData'), 'config.json');
+    const config = JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
+
+    if (!config.openaiApiKey) {
+      return {
+        error: 'OpenAI API key not found. Please add it in settings.',
+      };
+    }
+
+    // First get the transcription
+    if (!diarizationService) {
+      diarizationService = new DiarizationService(config.assemblyaiApiKey);
+    }
+
+    // Check if transcription exists
+    const transcriptionPath = `${filePath}.txt`;
+    let transcription;
+    try {
+      transcription = await fsPromises.readFile(transcriptionPath, 'utf8');
+    } catch (err) {
+      // If transcription doesn't exist, create it
+      const result = await diarizationService.transcribeAudio(filePath);
+      if (result.error) {
+        return { error: result.error };
+      }
+      transcription = result.segments
+        .map((segment) => `[${segment.speaker}]: ${segment.text}`)
+        .join('\n');
+      await fsPromises.writeFile(transcriptionPath, transcription);
+    }
+
+    // Use OpenAI to generate summary
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.openaiApiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a helpful assistant that creates concise summaries of conversations.',
+          },
+          {
+            role: 'user',
+            content: `Please provide a concise summary of this conversation:\n\n${transcription}`,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return { error: error.error?.message || 'Failed to generate summary' };
+    }
+
+    const data = await response.json();
+    const summary = data.choices[0].message.content;
+
+    // Save summary alongside the audio file
+    const summaryPath = `${filePath}.summary.txt`;
+    await fsPromises.writeFile(summaryPath, summary);
+
+    return {
+      success: true,
+      summary,
+    };
+  } catch (error) {
+    console.error('Error generating summary:', error);
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Unknown error during summary generation',
+    };
+  }
+});
+
+// Add action items handler
+ipcMain.handle('create-action-items', async (_, filePath: string) => {
+  try {
+    // Get API keys from config
+    const configPath = path.join(app.getPath('userData'), 'config.json');
+    const config = JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
+
+    if (!config.assemblyaiApiKey) {
+      return {
+        error: 'AssemblyAI API key not found. Please add it in settings.',
+      };
+    }
+
+    // Initialize diarization service if needed
+    if (!diarizationService) {
+      diarizationService = new DiarizationService(config.assemblyaiApiKey);
+    }
+
+    // Generate action items
+    const result = await diarizationService.createActionItems(filePath);
+    console.log('Action items result:', result); // Add logging
+
+    if (result.error) {
+      console.error('Action items error:', result.error); // Add error logging
+      return { error: result.error };
+    }
+
+    // Save action items alongside the audio file
+    const actionItemsPath = `${filePath}.actions.txt`;
+    await fsPromises.writeFile(actionItemsPath, result.actionItems || '');
+
+    return {
+      success: true,
+      actionItems: result.actionItems,
+    };
+  } catch (error) {
+    console.error('Error generating action items:', error);
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Unknown error generating action items',
+    };
+  }
+});
+
+// Add file system handlers
+ipcMain.handle('file-exists', async (_, filePath: string) => {
+  try {
+    await fsPromises.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle('read-file', async (_, filePath: string) => {
+  try {
+    const content = await fsPromises.readFile(filePath, 'utf8');
+    return content;
+  } catch (error) {
+    console.error('Error reading file:', error);
+    throw error;
   }
 });

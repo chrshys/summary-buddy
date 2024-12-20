@@ -1148,10 +1148,10 @@
   resolved "https://registry.yarnpkg.com/@gar/promisify/-/promisify-1.1.3.tgz#555193ab2e3bb3b6adc3d551c9c030d9e860daf6"
   integrity sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==
 
-"@heroicons/react@2.0.0":
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/@heroicons/react/-/react-2.0.0.tgz#6188c661d8b70e9aa303a4b2efc08f6582e37845"
-  integrity sha512-d5zPCD+lXQdGxsVf6H5s8RDHUzvUsDAt7w6i9FJAHg4jc3lcbyshkpwaxqL/iEFHqqT0/Y6YbW7rTudX3Aw8Rw==
+"@heroicons/react@^2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@heroicons/react/-/react-2.2.0.tgz#0c05124af50434a800773abec8d3af6a297d904b"
+  integrity sha512-LMcepvRaS9LYHJGsF0zzmgKCUim/X3N/DQKc4jepAXJ7l8QxJ1PmxJzqplF2Z3FE4PqBAIGyJAQ/w4B5dsqbtQ==
 
 "@humanwhocodes/config-array@^0.13.0":
   version "0.13.0"
@@ -2935,6 +2935,13 @@ arraybuffer.prototype.slice@^1.0.4:
     es-errors "^1.3.0"
     get-intrinsic "^1.2.6"
     is-array-buffer "^3.0.4"
+
+assemblyai@^4.8.0:
+  version "4.8.0"
+  resolved "https://registry.yarnpkg.com/assemblyai/-/assemblyai-4.8.0.tgz#e5abbd401f70669fa556b7daf73a14bbad090013"
+  integrity sha512-TRIcthDBdJ+lj1ohLa516Kr/BO2AQn+IhBBl/eeomZGZym90aEC6qirc337hEPUxmmINSJ8XTSY4xwy51HmDGA==
+  dependencies:
+    ws "^8.18.0"
 
 assert-plus@^1.0.0:
   version "1.0.0"
@@ -10665,7 +10672,7 @@ ws@^7.3.1:
   resolved "https://registry.yarnpkg.com/ws/-/ws-7.5.10.tgz#58b5c20dc281633f6c19113f39b349bd8bd558d9"
   integrity sha512-+dbF1tHwZpXcbOJdVOkzLDxZP1ailvSxM6ZweXTegylPny803bFhA+vqBYw4s31NSAk4S2Qz+AKXK9a4wkdjcQ==
 
-ws@^8.11.0, ws@^8.13.0:
+ws@^8.11.0, ws@^8.13.0, ws@^8.18.0:
   version "8.18.0"
   resolved "https://registry.yarnpkg.com/ws/-/ws-8.18.0.tgz#0d7505a6eafe2b0e712d232b42279f53bc289bbc"
   integrity sha512-8VbfWfHLbbwu3+N6OKsOMpBdT4kXPDDB9cJk2bJ6mh9ucxdlnNvH1e+roYkKmN9Nxw2yjz7VzeO9oOz2zJ04Pw==

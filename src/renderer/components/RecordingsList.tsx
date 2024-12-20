@@ -19,7 +19,7 @@ export default function RecordingsList({
   onPlay,
   onDelete,
   onTranscribe,
-  onStopRecording,
+  onStopRecording = undefined,
   elapsedTime,
   isTranscribing,
 }: RecordingsListProps) {
@@ -64,7 +64,3 @@ export default function RecordingsList({
     </div>
   );
 }
-
-RecordingsList.defaultProps = {
-  onStopRecording: undefined,
-};
