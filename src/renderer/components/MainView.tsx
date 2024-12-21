@@ -325,7 +325,7 @@ export default function MainView() {
           resolvedTheme === 'dark' ? 'text-neutral-400' : 'text-neutral-600'
         }`}
       >
-        Summary Buddy
+        Little Listener
       </div>
     );
   };

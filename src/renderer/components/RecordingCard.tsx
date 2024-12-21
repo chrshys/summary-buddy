@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import type { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
+import { getDefaultTitle } from '../utils/dateFormatting';
 
 interface RecordingCardProps {
   recording: Recording;
@@ -83,13 +84,7 @@ export default function RecordingCard({
         .toLowerCase()}`
     : '';
 
-  const formattedDate = date
-    ? `${date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      })}`
-    : 'Untitled Recording';
+  const defaultTitle = date ? getDefaultTitle(date) : 'Untitled Recording';
 
   const handleDelete = async (rec: Recording) => {
     if (isDeleting) return;
@@ -137,7 +132,7 @@ export default function RecordingCard({
           <span
             className={`text-base font-medium truncate ${getDateClasses(effectiveTheme)}`}
           >
-            {recording.title || formattedDate}
+            {recording.title || defaultTitle}
           </span>
           <div className={`text-xs ${getDurationClasses(effectiveTheme)}`}>
             {recording.duration

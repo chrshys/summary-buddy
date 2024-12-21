@@ -5,6 +5,7 @@ import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
+import { getDefaultTitle } from '../utils/dateFormatting';
 
 type Tab = 'my-notes' | 'summary';
 
@@ -159,7 +160,7 @@ export default function RecordingView({
     .toLowerCase();
 
   const handleStartEditing = () => {
-    setEditedTitle(activeRecording.title || formattedDate);
+    setEditedTitle(activeRecording.title || getDefaultTitle(date));
     setIsEditing(true);
   };
 
@@ -263,7 +264,7 @@ export default function RecordingView({
             ) : (
               <>
                 <h1 className="text-xl font-semibold">
-                  {activeRecording.title || formattedDate}
+                  {activeRecording.title || getDefaultTitle(date)}
                 </h1>
                 <button
                   type="button"
