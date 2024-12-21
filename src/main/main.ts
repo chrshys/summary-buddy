@@ -1122,3 +1122,67 @@ ipcMain.handle(
     }
   },
 );
+
+// Add save manual notes handler
+ipcMain.handle(
+  'save-manual-notes',
+  async (_, filePath: string, notes: string) => {
+    try {
+      const folderPath = path.dirname(filePath);
+      const timestamp = path
+        .basename(folderPath)
+        .match(/recording-(\d+)$/)?.[1];
+
+      if (!timestamp) {
+        return { error: 'Invalid recording folder structure' };
+      }
+
+      const manualNotesPath = path.join(
+        folderPath,
+        `manual-notes-${timestamp}.txt`,
+      );
+      await fsPromises.writeFile(manualNotesPath, notes);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error saving manual notes:', error);
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to save manual notes',
+      };
+    }
+  },
+);
+
+// Add get manual notes handler
+ipcMain.handle('get-manual-notes', async (_, filePath: string) => {
+  try {
+    const folderPath = path.dirname(filePath);
+    const timestamp = path.basename(folderPath).match(/recording-(\d+)$/)?.[1];
+
+    if (!timestamp) {
+      return { error: 'Invalid recording folder structure' };
+    }
+
+    const manualNotesPath = path.join(
+      folderPath,
+      `manual-notes-${timestamp}.txt`,
+    );
+
+    try {
+      const notes = await fsPromises.readFile(manualNotesPath, 'utf8');
+      return { success: true, notes };
+    } catch (err) {
+      // Return empty string if file doesn't exist
+      return { success: true, notes: '' };
+    }
+  } catch (error) {
+    console.error('Error reading manual notes:', error);
+    return {
+      error:
+        error instanceof Error ? error.message : 'Failed to read manual notes',
+    };
+  }
+});

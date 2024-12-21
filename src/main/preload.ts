@@ -61,6 +61,10 @@ const electronHandler = {
       ipcRenderer.invoke('update-recording-title', { path, title }),
     getRecordingPaths: (recordingPath: string) =>
       ipcRenderer.invoke('get-recording-paths', recordingPath),
+    saveManualNotes: (filePath: string, notes: string) =>
+      ipcRenderer.invoke('save-manual-notes', filePath, notes),
+    getManualNotes: (filePath: string) =>
+      ipcRenderer.invoke('get-manual-notes', filePath),
   },
   fileSystem: {
     exists: (filePath: string) => ipcRenderer.invoke('file-exists', filePath),

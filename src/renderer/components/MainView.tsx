@@ -35,6 +35,7 @@ export default function MainView() {
   const [isGeneratingNotes, setIsGeneratingNotes] = useState<
     Record<string, boolean>
   >({});
+  const [manualNotes, setManualNotes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval>;
@@ -325,7 +326,7 @@ export default function MainView() {
           resolvedTheme === 'dark' ? 'text-neutral-400' : 'text-neutral-600'
         }`}
       >
-        Little Listener
+        Minimix
       </div>
     );
   };
@@ -358,6 +359,50 @@ export default function MainView() {
       }));
     });
   }, []);
+
+  const handleSaveManualNotes = async (recording: Recording, notes: string) => {
+    try {
+      const result = await window.electron.audioRecorder.saveManualNotes(
+        recording.path,
+        notes,
+      );
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setManualNotes((prev) => ({
+        ...prev,
+        [recording.path]: notes,
+      }));
+    } catch (err) {
+      setError('Failed to save manual notes');
+    }
+  };
+
+  // Load manual notes when a recording is selected
+  useEffect(() => {
+    const loadManualNotes = async (recording: Recording) => {
+      try {
+        const result = await window.electron.audioRecorder.getManualNotes(
+          recording.path,
+        );
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        if (result.notes !== undefined) {
+          setManualNotes((prev) => ({
+            ...prev,
+            [recording.path]: result.notes,
+          }));
+        }
+      } catch (err) {
+        setError('Failed to load manual notes');
+      }
+    };
+
+    recordings.forEach(loadManualNotes);
+  }, [recordings]);
 
   return (
     <div
@@ -417,7 +462,7 @@ export default function MainView() {
           path="/"
           element={
             <div className="flex flex-col items-center h-[calc(100vh-36px)]">
-              <div className="flex flex-col items-center justify-center min-h-[180px] pt-2">
+              <div className="flex flex-col items-center justify-center min-h-[180px] pt-12 pb-8">
                 <RecordButton
                   isRecording={isRecording}
                   audioLevel={audioLevel}
@@ -453,6 +498,8 @@ export default function MainView() {
               elapsedTime={elapsedTime}
               onStopRecording={toggleRecording}
               audioLevel={audioLevel}
+              onSaveManualNotes={handleSaveManualNotes}
+              manualNotes={manualNotes}
             />
           }
         />

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic } from 'lucide-react';
+import { Mic, Play } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface RecordButtonProps {
@@ -7,6 +7,8 @@ interface RecordButtonProps {
   audioLevel: number;
   elapsedTime: number;
   onToggleRecording: () => void;
+  isPlayButton?: boolean;
+  duration?: number;
 }
 
 const formatTime = (seconds: number): string => {
@@ -17,10 +19,16 @@ const formatTime = (seconds: number): string => {
 
 const getButtonBackgroundClass = (
   isRecording: boolean,
+  isPlayButton: boolean,
   theme: 'light' | 'dark',
 ): string => {
   if (isRecording) {
     return 'bg-red-500 hover:bg-red-600';
+  }
+  if (isPlayButton) {
+    return theme === 'dark'
+      ? 'bg-app-dark-surface hover:bg-app-dark-border'
+      : 'bg-app-light-surface hover:bg-app-light-border';
   }
   return theme === 'dark'
     ? 'bg-app-dark-surface/50 hover:bg-app-dark-surface'
@@ -32,19 +40,52 @@ export default function RecordButton({
   audioLevel,
   elapsedTime,
   onToggleRecording,
+  isPlayButton = false,
+  duration = 0,
 }: RecordButtonProps) {
   const { effectiveTheme } = useTheme();
+
+  const getAriaLabel = () => {
+    if (isRecording) {
+      return 'Stop Recording';
+    }
+    if (isPlayButton) {
+      return 'Play Recording';
+    }
+    return 'Start Recording';
+  };
+
+  const getButtonText = () => {
+    if (isRecording) {
+      return formatTime(elapsedTime);
+    }
+    if (isPlayButton) {
+      return formatTime(duration);
+    }
+    return 'Record';
+  };
+
+  const textColorClass =
+    effectiveTheme === 'dark'
+      ? 'text-app-dark-text-secondary'
+      : 'text-app-light-text-secondary';
+
+  const iconColorClass =
+    effectiveTheme === 'dark'
+      ? 'text-app-dark-text-primary'
+      : 'text-app-light-text-primary';
 
   return (
     <div className="flex flex-col items-center">
       <button
         type="button"
         onClick={onToggleRecording}
-        className={`p-4 rounded-full transition-all relative ${getButtonBackgroundClass(
+        className={`p-5 rounded-full transition-all relative ${getButtonBackgroundClass(
           isRecording,
+          isPlayButton,
           effectiveTheme,
         )}`}
-        aria-label={isRecording ? 'Stop Recording' : 'Start Recording'}
+        aria-label={getAriaLabel()}
         style={{
           transform: isRecording
             ? `scale(${1 + audioLevel * 0.15})`
@@ -52,14 +93,11 @@ export default function RecordButton({
           transition: 'transform 0.05s ease-out',
         }}
       >
-        <Mic
-          size={24}
-          className={
-            effectiveTheme === 'dark'
-              ? 'text-app-dark-text-primary'
-              : 'text-app-light-text-primary'
-          }
-        />
+        {isPlayButton && !isRecording ? (
+          <Play size={30} className={iconColorClass} />
+        ) : (
+          <Mic size={30} className={iconColorClass} />
+        )}
         {isRecording && (
           <>
             <div
@@ -106,16 +144,7 @@ export default function RecordButton({
           </>
         )}
       </button>
-
-      <p
-        className={`mt-4 text-sm ${
-          effectiveTheme === 'dark'
-            ? 'text-app-dark-text-secondary'
-            : 'text-app-light-text-secondary'
-        }`}
-      >
-        {isRecording ? `Recording... ${formatTime(elapsedTime)}` : 'Record'}
-      </p>
+      <p className={`mt-4 text-sm ${textColorClass}`}>{getButtonText()}</p>
     </div>
   );
 }

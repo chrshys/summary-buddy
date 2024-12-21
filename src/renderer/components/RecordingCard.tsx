@@ -111,50 +111,50 @@ export default function RecordingCard({
         effectiveTheme,
       )}`}
     >
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onPlay(recording);
-          }}
-          className={`p-2 mr-3 transition-colors rounded-md ${getPlayButtonClasses(
-            effectiveTheme,
-          )}`}
-          aria-label="Play recording"
+      <div className="flex flex-col flex-1 min-w-0">
+        <span
+          className={`text-base font-medium mb-1 ${getDateClasses(effectiveTheme)}`}
         >
-          <Play size={16} />
-        </button>
-        <div className="flex flex-col flex-1 min-w-0">
-          <span className={`text-xs mb-1 ${getTimeClasses(effectiveTheme)}`}>
-            {formattedDateTime}
-          </span>
-          <span
-            className={`text-base font-medium truncate ${getDateClasses(effectiveTheme)}`}
-          >
-            {recording.title || defaultTitle}
-          </span>
-          <div className={`text-xs ${getDurationClasses(effectiveTheme)}`}>
-            {recording.duration
-              ? formatDuration(Math.round(recording.duration))
-              : 'Processing...'}
-          </div>
-        </div>
-        <div className="flex ml-4 transition-opacity opacity-0 group-hover:opacity-100">
+          {recording.title || defaultTitle}
+        </span>
+        <span className={`text-xs mb-2 ${getTimeClasses(effectiveTheme)}`}>
+          {formattedDateTime}
+        </span>
+        <div className="flex items-center justify-between">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              handleDelete(recording);
+              onPlay(recording);
             }}
-            disabled={isDeleting}
-            className={`p-2 transition-colors rounded-md ${getDeleteButtonClasses(
+            className={`flex items-center gap-2 p-2 transition-colors rounded-md ${getPlayButtonClasses(
               effectiveTheme,
-            )} ${isDeleting ? 'opacity-50' : ''}`}
-            aria-label="Delete recording"
+            )}`}
+            aria-label="Play recording"
           >
-            <Trash2 size={16} />
+            <Play size={16} />
+            <span className={`text-xs ${getDurationClasses(effectiveTheme)}`}>
+              {recording.duration
+                ? formatDuration(Math.round(recording.duration))
+                : 'Processing...'}
+            </span>
           </button>
+          <div className="flex transition-opacity opacity-0 group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDelete(recording);
+              }}
+              disabled={isDeleting}
+              className={`p-2 transition-colors rounded-md ${getDeleteButtonClasses(
+                effectiveTheme,
+              )} ${isDeleting ? 'opacity-50' : ''}`}
+              aria-label="Delete recording"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>
