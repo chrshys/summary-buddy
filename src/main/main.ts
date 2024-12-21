@@ -9,6 +9,7 @@
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
 import path from 'path';
+import fs from 'fs';
 import {
   app,
   BrowserWindow,
@@ -20,15 +21,25 @@ import {
   dialog,
   desktopCapturer,
   NativeImage,
+  protocol,
 } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
-import { promises as fsPromises, existsSync } from 'fs';
 import * as mm from 'music-metadata';
 import CoreAudioRecorder from './audio/coreaudio';
 import { resolveHtmlPath } from './util';
 import { RecordingMetadataStore } from './audio/RecordingMetadata';
 import DiarizationService from './services/diarization';
+
+// Utility functions
+function checkMetadataExists(metadataPath: string): boolean {
+  try {
+    fs.accessSync(metadataPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 class AppUpdater {
   constructor() {
@@ -38,6 +49,7 @@ class AppUpdater {
   }
 }
 
+// Move these functions to the top of the file, after the variable declarations
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let audioRecorder: CoreAudioRecorder | null = null;
@@ -48,7 +60,29 @@ let normalTrayIcon: NativeImage | null = null;
 let recordingTrayIcon: NativeImage | null = null;
 let diarizationService: DiarizationService | null = null;
 
-// Move these function declarations to the top, after the variable declarations
+// Add the audio level functions here, before they're used
+function startAudioLevelUpdates(window: BrowserWindow) {
+  if (audioLevelInterval) {
+    clearInterval(audioLevelInterval);
+  }
+  audioLevelInterval = setInterval(() => {
+    if (audioRecorder) {
+      const level = audioRecorder.getAudioLevel();
+      if (typeof level === 'number' && !window.isDestroyed()) {
+        window.webContents.send('audio-level', level);
+      }
+    }
+  }, 16); // ~60fps update rate
+}
+
+function stopAudioLevelUpdates() {
+  if (audioLevelInterval) {
+    clearInterval(audioLevelInterval);
+    audioLevelInterval = null;
+  }
+}
+
+// Move these function declarations to the top as well
 function setRecordingState(isRecording: boolean) {
   if (!tray || !normalTrayIcon || !recordingTrayIcon) return;
   tray.setImage(isRecording ? recordingTrayIcon : normalTrayIcon);
@@ -100,8 +134,8 @@ function createTrayIcon(getAssetPath: (...paths: string[]) => string) {
 async function loadPinnedState() {
   try {
     const configPath = path.join(app.getPath('userData'), 'config.json');
-    if (existsSync(configPath)) {
-      const config = JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       return config.isPinned || false;
     }
   } catch (error) {
@@ -114,12 +148,12 @@ async function loadPinnedState() {
 async function savePinnedState(pinned: boolean) {
   try {
     const configPath = path.join(app.getPath('userData'), 'config.json');
-    const config = existsSync(configPath)
-      ? JSON.parse(await fsPromises.readFile(configPath, 'utf8'))
+    const config = fs.existsSync(configPath)
+      ? JSON.parse(fs.readFileSync(configPath, 'utf8'))
       : {};
 
     config.isPinned = pinned;
-    await fsPromises.writeFile(configPath, JSON.stringify(config, null, 2));
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
   } catch (error) {
     console.error('Error saving pinned state:', error);
   }
@@ -129,13 +163,13 @@ async function savePinnedState(pinned: boolean) {
 async function saveWindowPosition(window: BrowserWindow) {
   try {
     const configPath = path.join(app.getPath('userData'), 'config.json');
-    const config = existsSync(configPath)
-      ? JSON.parse(await fsPromises.readFile(configPath, 'utf8'))
+    const config = fs.existsSync(configPath)
+      ? JSON.parse(fs.readFileSync(configPath, 'utf8'))
       : {};
 
     const bounds = window.getBounds();
     config.windowPosition = bounds;
-    await fsPromises.writeFile(configPath, JSON.stringify(config, null, 2));
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
   } catch (error) {
     console.error('Error saving window position:', error);
   }
@@ -144,8 +178,8 @@ async function saveWindowPosition(window: BrowserWindow) {
 async function loadWindowPosition(): Promise<{ x: number; y: number } | null> {
   try {
     const configPath = path.join(app.getPath('userData'), 'config.json');
-    if (existsSync(configPath)) {
-      const config = JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       return config.windowPosition || null;
     }
   } catch (error) {
@@ -210,6 +244,10 @@ const createWindow = async () => {
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
         : path.join(__dirname, '../../.erb/dll/preload.js'),
+      webSecurity: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
     },
   });
 
@@ -317,8 +355,8 @@ async function getRecordingsPath() {
   try {
     // Try to read the saved path from userData
     const configPath = path.join(app.getPath('userData'), 'config.json');
-    if (existsSync(configPath)) {
-      const config = JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       recordingsPath = config.recordingsPath;
     }
   } catch (error) {
@@ -329,7 +367,7 @@ async function getRecordingsPath() {
   recordingsPath = recordingsPath || defaultPath;
 
   // Ensure the directory exists
-  await fsPromises.mkdir(recordingsPath, { recursive: true });
+  fs.mkdirSync(recordingsPath, { recursive: true });
   return recordingsPath;
 }
 
@@ -339,10 +377,8 @@ ipcMain.handle(
   async (_, provider: 'openai' | 'assemblyai' = 'openai') => {
     try {
       const configPath = path.join(app.getPath('userData'), 'config.json');
-      if (existsSync(configPath)) {
-        const config = JSON.parse(
-          await fsPromises.readFile(configPath, 'utf8'),
-        );
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         return { key: config[`${provider}ApiKey`] || null };
       }
       return { key: null };
@@ -359,12 +395,12 @@ ipcMain.handle(
   async (_, key: string, provider: 'openai' | 'assemblyai' = 'openai') => {
     try {
       const configPath = path.join(app.getPath('userData'), 'config.json');
-      const config = existsSync(configPath)
-        ? JSON.parse(await fsPromises.readFile(configPath, 'utf8'))
+      const config = fs.existsSync(configPath)
+        ? JSON.parse(fs.readFileSync(configPath, 'utf8'))
         : {};
 
       config[`${provider}ApiKey`] = key;
-      await fsPromises.writeFile(configPath, JSON.stringify(config, null, 2));
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
       return { success: true };
     } catch (error) {
       console.error('Error saving API key:', error);
@@ -395,7 +431,7 @@ async function createRecordingFolder(timestamp: number): Promise<string> {
   const recordingsDir = await getRecordingsPath();
   const folderName = `recording-${timestamp}`;
   const folderPath = path.join(recordingsDir, folderName);
-  await fsPromises.mkdir(folderPath, { recursive: true });
+  fs.mkdirSync(folderPath, { recursive: true });
   return folderPath;
 }
 
@@ -416,6 +452,11 @@ ipcMain.handle('start-recording', async () => {
     const result = await audioRecorder.startRecording(outputPath);
     if (result.error) {
       return { error: result.error };
+    }
+
+    // Start audio level updates
+    if (mainWindow) {
+      startAudioLevelUpdates(mainWindow);
     }
 
     // Send initial recording info to renderer
@@ -440,15 +481,6 @@ ipcMain.handle('start-recording', async () => {
       });
     }, 1000);
 
-    audioLevelInterval = setInterval(() => {
-      if (audioRecorder) {
-        const audioLevel = audioRecorder.getAudioLevel();
-        const level = typeof audioLevel === 'number' ? audioLevel : 0;
-        console.log('Sending audio level to renderer:', level);
-        mainWindow?.webContents.send('audio-level', level);
-      }
-    }, 16);
-
     setRecordingState(true);
     return { success: true, outputPath };
   } catch (error) {
@@ -465,15 +497,8 @@ async function getRecordingDuration(filePath: string): Promise<number> {
   try {
     // First try to get duration from metadata file
     const metadataPath = `${filePath}.meta`;
-    if (
-      await fsPromises
-        .access(metadataPath)
-        .then(() => true)
-        .catch(() => false)
-    ) {
-      const metadata = JSON.parse(
-        await fsPromises.readFile(metadataPath, 'utf8'),
-      );
+    if (checkMetadataExists(metadataPath)) {
+      const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
       if (metadata.duration) {
         console.log(
           `Got duration ${metadata.duration} from metadata file for ${filePath}`,
@@ -514,7 +539,7 @@ async function updateRecordingMetadata(
 
     // Try to read existing metadata
     try {
-      const existingMetadata = await fsPromises.readFile(metadataPath, 'utf8');
+      const existingMetadata = fs.readFileSync(metadataPath, 'utf8');
       metadata = JSON.parse(existingMetadata);
     } catch (error) {
       // If file doesn't exist or is invalid, start with empty metadata
@@ -527,7 +552,7 @@ async function updateRecordingMetadata(
       lastModified: new Date().toISOString(),
     };
 
-    await fsPromises.writeFile(metadataPath, JSON.stringify(metadata, null, 2));
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
     return { success: true };
   } catch (error) {
     console.error('Error updating metadata:', error);
@@ -545,6 +570,9 @@ ipcMain.handle('stop-recording', async () => {
       return { error: 'No recording in progress' };
     }
 
+    // Stop audio level updates
+    stopAudioLevelUpdates();
+
     const result = await audioRecorder.stopRecording();
     if (result.error) {
       return { error: result.error };
@@ -559,7 +587,7 @@ ipcMain.handle('stop-recording', async () => {
     // If duration is 0, delete the recording folder
     if (duration === 0) {
       try {
-        await fsPromises.rm(folderPath, { recursive: true });
+        fs.rmSync(folderPath, { recursive: true });
         return { success: true, duration: 0 };
       } catch (err) {
         console.error('Error deleting zero-duration recording:', err);
@@ -568,11 +596,6 @@ ipcMain.handle('stop-recording', async () => {
 
     // Save duration metadata
     await updateRecordingMetadata(folderPath, { duration });
-
-    if (audioLevelInterval) {
-      clearInterval(audioLevelInterval);
-      audioLevelInterval = null;
-    }
 
     if (durationInterval) {
       clearInterval(durationInterval);
@@ -599,16 +622,16 @@ ipcMain.handle('get-recordings-path', async () => {
 ipcMain.handle('set-recordings-path', async (_, newPath: string) => {
   try {
     // Create the directory if it doesn't exist
-    await fsPromises.mkdir(newPath, { recursive: true });
+    fs.mkdirSync(newPath, { recursive: true });
 
     // Save the path to config
     const configPath = path.join(app.getPath('userData'), 'config.json');
-    const config = existsSync(configPath)
-      ? JSON.parse(await fsPromises.readFile(configPath, 'utf8'))
+    const config = fs.existsSync(configPath)
+      ? JSON.parse(fs.readFileSync(configPath, 'utf8'))
       : {};
 
     config.recordingsPath = newPath;
-    await fsPromises.writeFile(configPath, JSON.stringify(config, null, 2));
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
     return { success: true };
   } catch (error) {
@@ -643,7 +666,7 @@ ipcMain.handle('open-recordings-folder', async () => {
 async function cleanupOldRecordings() {
   try {
     const recordingsDir = await getRecordingsPath();
-    const folders = await fsPromises.readdir(recordingsDir);
+    const folders = fs.readdirSync(recordingsDir);
     const now = Date.now();
     const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
 
@@ -653,7 +676,7 @@ async function cleanupOldRecordings() {
         .map(async (folder) => {
           try {
             const folderPath = path.join(recordingsDir, folder);
-            const stats = await fsPromises.stat(folderPath);
+            const stats = fs.lstatSync(folderPath);
 
             // Skip if not a directory
             if (!stats.isDirectory()) {
@@ -663,7 +686,7 @@ async function cleanupOldRecordings() {
             const age = now - stats.mtimeMs;
 
             if (age > maxAge) {
-              await fsPromises.rm(folderPath, { recursive: true });
+              fs.rmSync(folderPath, { recursive: true });
               console.log(`Deleted old recording folder: ${folder}`);
             }
           } catch (err) {
@@ -680,7 +703,7 @@ async function cleanupOldRecordings() {
 async function migrateExistingRecordings() {
   try {
     const recordingsDir = await getRecordingsPath();
-    const files = await fsPromises.readdir(recordingsDir);
+    const files = fs.readdirSync(recordingsDir);
 
     // Find all .mp3 files that aren't in a recording folder
     const oldRecordings = files.filter(
@@ -707,16 +730,14 @@ async function migrateExistingRecordings() {
           const newPath = path.join(folderPath, `recording-${timestamp}.mp3`);
 
           // Move recording file
-          await fsPromises.rename(oldPath, newPath);
+          fs.renameSync(oldPath, newPath);
 
           // Move metadata if it exists
           const oldMetaPath = `${oldPath}.meta`;
-          if (existsSync(oldMetaPath)) {
-            const metadata = JSON.parse(
-              await fsPromises.readFile(oldMetaPath, 'utf8'),
-            );
+          if (fs.existsSync(oldMetaPath)) {
+            const metadata = JSON.parse(fs.readFileSync(oldMetaPath, 'utf8'));
             await updateRecordingMetadata(folderPath, metadata);
-            await fsPromises.unlink(oldMetaPath);
+            fs.unlinkSync(oldMetaPath);
           }
 
           console.log(`Migrated recording: ${oldFile}`);
@@ -731,9 +752,31 @@ async function migrateExistingRecordings() {
 }
 
 // Add migration to app startup
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'file',
+    privileges: { standard: true, secure: true, supportFetchAPI: true },
+  },
+]);
+
 app
   .whenReady()
   .then(async () => {
+    // Register protocol handler
+    protocol.registerFileProtocol('file', (request) => {
+      try {
+        let filePath = decodeURIComponent(request.url.replace('file://', ''));
+        // On macOS, remove the extra leading slash
+        if (process.platform === 'darwin' && filePath.startsWith('/')) {
+          filePath = filePath.slice(1);
+        }
+        return { path: filePath };
+      } catch (error) {
+        console.error('Protocol error:', error);
+        return { error: -6 }; // net::ERR_FILE_NOT_FOUND
+      }
+    });
+
     await migrateExistingRecordings();
     cleanupOldRecordings();
     setInterval(cleanupOldRecordings, 24 * 60 * 60 * 1000);
@@ -749,6 +792,7 @@ app
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
+  stopAudioLevelUpdates();
   if (mainWindow && isPinned) {
     saveWindowPosition(mainWindow);
   }
@@ -768,8 +812,8 @@ app.on('before-quit', () => {
 ipcMain.handle('get-pinned-state', async () => {
   try {
     const configPath = path.join(app.getPath('userData'), 'config.json');
-    if (existsSync(configPath)) {
-      const config = JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       return { isPinned: config.isPinned || false };
     }
     return { isPinned: false };
@@ -799,13 +843,13 @@ ipcMain.handle('get-system-audio-source', async () => {
 ipcMain.handle('list-recordings', async () => {
   try {
     const recordingsDir = await getRecordingsPath();
-    const folders = await fsPromises.readdir(recordingsDir);
+    const folders = fs.readdirSync(recordingsDir);
     const recordings = await Promise.all(
       folders
         .filter((folder) => folder.startsWith('recording-'))
         .map(async (folder) => {
           const folderPath = path.join(recordingsDir, folder);
-          const stats = await fsPromises.stat(folderPath);
+          const stats = fs.lstatSync(folderPath);
           if (!stats.isDirectory()) return null;
 
           const folderTimestamp = folder.match(/recording-(\d+)$/)?.[1];
@@ -815,9 +859,9 @@ ipcMain.handle('list-recordings', async () => {
             folderPath,
             `recording-${folderTimestamp}.mp3`,
           );
-          if (!existsSync(recordingPath)) return null;
+          if (!fs.existsSync(recordingPath)) return null;
 
-          const recordingStats = await fsPromises.stat(recordingPath);
+          const recordingStats = fs.lstatSync(recordingPath);
           const match = folder.match(/recording-(\d+)$/);
           const timestamp = match
             ? parseInt(match[1], 10)
@@ -827,7 +871,7 @@ ipcMain.handle('list-recordings', async () => {
           // If duration is 0, delete the folder and its contents
           if (duration === 0) {
             try {
-              await fsPromises.rm(folderPath, { recursive: true });
+              fs.rmSync(folderPath, { recursive: true });
               return null;
             } catch (err) {
               console.error(
@@ -837,16 +881,43 @@ ipcMain.handle('list-recordings', async () => {
             }
           }
 
-          // Try to read custom title from metadata
+          // Check for existing notes and AI summary
           let customTitle = null;
+          let hasAiSummary = false;
+          let manualNotes = '';
+          let aiNotes = '';
+
           try {
+            // Check metadata for title
             const metadataPath = path.join(folderPath, 'metadata.json');
-            const metadata = JSON.parse(
-              await fsPromises.readFile(metadataPath, 'utf8'),
+            if (fs.existsSync(metadataPath)) {
+              const metadata = JSON.parse(
+                fs.readFileSync(metadataPath, 'utf8'),
+              );
+              customTitle = metadata.title || null;
+            }
+
+            // Check for AI summary
+            const aiNotesPath = path.join(
+              folderPath,
+              `notes-${folderTimestamp}.txt`,
             );
-            customTitle = metadata.title || null;
+            if (fs.existsSync(aiNotesPath)) {
+              hasAiSummary = true;
+              aiNotes = fs.readFileSync(aiNotesPath, 'utf8');
+            }
+
+            // Check for manual notes
+            const manualNotesPath = path.join(
+              folderPath,
+              `manual-notes-${folderTimestamp}.txt`,
+            );
+            if (fs.existsSync(manualNotesPath)) {
+              manualNotes = fs.readFileSync(manualNotesPath, 'utf8');
+            }
           } catch (err) {
             // Ignore metadata read errors
+            console.error('Error reading metadata or notes:', err);
           }
 
           return {
@@ -855,6 +926,9 @@ ipcMain.handle('list-recordings', async () => {
             date: new Date(timestamp).toISOString(),
             duration,
             title: customTitle,
+            hasAiSummary,
+            manualNotes,
+            aiNotes,
           };
         }),
     );
@@ -878,13 +952,14 @@ ipcMain.handle('list-recordings', async () => {
 // Add play recording handler
 ipcMain.handle('play-recording', async (_, filePath: string) => {
   try {
-    await shell.openPath(filePath);
+    // Just verify the file exists
+    fs.accessSync(filePath);
     return { success: true };
   } catch (error) {
-    console.error('Error playing recording:', error);
+    console.error('Error accessing recording:', error);
     return {
       error:
-        error instanceof Error ? error.message : 'Failed to play recording',
+        error instanceof Error ? error.message : 'Failed to access recording',
     };
   }
 });
@@ -901,7 +976,7 @@ ipcMain.handle('delete-recording', async (_, filePath: string) => {
     }
 
     // Delete the entire folder and its contents
-    await fsPromises.rm(folderPath, { recursive: true });
+    fs.rmSync(folderPath, { recursive: true });
 
     return { success: true };
   } catch (error) {
@@ -918,7 +993,7 @@ ipcMain.handle('transcribe-recording', async (_, filePath: string) => {
   try {
     // Get API keys from config
     const configPath = path.join(app.getPath('userData'), 'config.json');
-    const config = JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
     if (!config.assemblyaiApiKey) {
       return {
@@ -957,7 +1032,7 @@ ipcMain.handle('transcribe-recording', async (_, filePath: string) => {
       .map((segment) => `[${segment.speaker}]: ${segment.text}`)
       .join('\n');
 
-    await fsPromises.writeFile(transcriptionPath, formattedTranscript);
+    fs.writeFileSync(transcriptionPath, formattedTranscript);
 
     return {
       success: true,
@@ -980,7 +1055,7 @@ ipcMain.handle('create-summary', async (_, filePath: string) => {
   try {
     // Get API keys from config
     const configPath = path.join(app.getPath('userData'), 'config.json');
-    const config = JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
     if (!config.assemblyaiApiKey) {
       return {
@@ -1017,7 +1092,7 @@ ipcMain.handle('create-summary', async (_, filePath: string) => {
 
     // Save notes
     if (result.notes) {
-      await fsPromises.writeFile(notesPath, result.notes);
+      fs.writeFileSync(notesPath, result.notes);
     }
 
     return {
@@ -1040,7 +1115,7 @@ ipcMain.handle('create-action-items', async (_, filePath: string) => {
   try {
     // Get API keys from config
     const configPath = path.join(app.getPath('userData'), 'config.json');
-    const config = JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
     if (!config.assemblyaiApiKey) {
       return {
@@ -1064,7 +1139,7 @@ ipcMain.handle('create-action-items', async (_, filePath: string) => {
 
     // Save notes alongside the audio file
     const notesPath = `${filePath}.notes.txt`;
-    await fsPromises.writeFile(notesPath, result.notes || '');
+    fs.writeFileSync(notesPath, result.notes || '');
 
     return {
       success: true,
@@ -1084,7 +1159,7 @@ ipcMain.handle('create-action-items', async (_, filePath: string) => {
 // Add file system handlers
 ipcMain.handle('file-exists', async (_, filePath: string) => {
   try {
-    await fsPromises.access(filePath);
+    fs.accessSync(filePath);
     return true;
   } catch {
     return false;
@@ -1093,7 +1168,7 @@ ipcMain.handle('file-exists', async (_, filePath: string) => {
 
 ipcMain.handle('read-file', async (_, filePath: string) => {
   try {
-    const content = await fsPromises.readFile(filePath, 'utf8');
+    const content = fs.readFileSync(filePath, 'utf8');
     return content;
   } catch (error) {
     console.error('Error reading file:', error);
@@ -1141,7 +1216,7 @@ ipcMain.handle(
         folderPath,
         `manual-notes-${timestamp}.txt`,
       );
-      await fsPromises.writeFile(manualNotesPath, notes);
+      fs.writeFileSync(manualNotesPath, notes);
 
       return { success: true };
     } catch (error) {
@@ -1172,7 +1247,7 @@ ipcMain.handle('get-manual-notes', async (_, filePath: string) => {
     );
 
     try {
-      const notes = await fsPromises.readFile(manualNotesPath, 'utf8');
+      const notes = fs.readFileSync(manualNotesPath, 'utf8');
       return { success: true, notes };
     } catch (err) {
       // Return empty string if file doesn't exist
@@ -1184,5 +1259,16 @@ ipcMain.handle('get-manual-notes', async (_, filePath: string) => {
       error:
         error instanceof Error ? error.message : 'Failed to read manual notes',
     };
+  }
+});
+
+// Add new audio playback IPC handlers
+ipcMain.handle('get-audio-duration', async (_, filePath: string) => {
+  try {
+    const metadata = await mm.parseFile(filePath);
+    return { duration: metadata.format.duration || 0 };
+  } catch (error) {
+    console.error('Error getting audio duration:', error);
+    return { error: 'Failed to get audio duration' };
   }
 });

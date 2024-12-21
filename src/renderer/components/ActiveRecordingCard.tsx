@@ -1,19 +1,23 @@
 import React from 'react';
 import { Square } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { formatTime } from '../utils/time';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface ActiveRecordingCardProps {
   elapsedTime: number;
   onStopRecording: () => void;
+  recordingPath?: string;
 }
 
 export default function ActiveRecordingCard({
   elapsedTime,
   onStopRecording,
+  recordingPath = 'in-progress',
 }: ActiveRecordingCardProps) {
   const { effectiveTheme } = useTheme();
+  const navigate = useNavigate();
   const formattedDate = new Date().toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -25,6 +29,17 @@ export default function ActiveRecordingCard({
     hour12: true,
   });
 
+  const handleClick = (e: React.MouseEvent) => {
+    // Prevent click from bubbling to parent elements
+    e.stopPropagation();
+    navigate(`/recording/${encodeURIComponent(recordingPath)}`);
+  };
+
+  const handleStopClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onStopRecording();
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -34,15 +49,16 @@ export default function ActiveRecordingCard({
         duration: 0.2,
         ease: 'easeInOut',
       }}
-      className={`flex items-center justify-between p-3 rounded-lg border transition-all duration-200 ${
+      onClick={handleClick}
+      className={`flex items-center justify-between p-3 rounded-lg border transition-all duration-200 cursor-pointer ${
         effectiveTheme === 'dark'
-          ? 'bg-red-900/30 border-red-500/50'
-          : 'bg-red-50 border-red-400'
+          ? 'bg-red-900/30 border-red-500/50 hover:bg-red-900/40'
+          : 'bg-red-50 border-red-400 hover:bg-red-100/80'
       }`}
     >
       <button
         type="button"
-        onClick={onStopRecording}
+        onClick={handleStopClick}
         className={`p-2 mr-3 transition-colors rounded-md ${
           effectiveTheme === 'dark'
             ? 'text-red-200 hover:text-red-100 hover:bg-red-900/50'

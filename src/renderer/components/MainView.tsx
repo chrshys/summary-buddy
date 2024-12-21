@@ -79,19 +79,24 @@ export default function MainView() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = window.electron.ipcRenderer.on(
-      'audio-level',
-      (level) => {
+    let unsubscribe: (() => void) | null = null;
+
+    if (isRecording) {
+      unsubscribe = window.electron.ipcRenderer.on('audio-level', (level) => {
         if (typeof level === 'number') {
           setAudioLevel(level);
         }
-      },
-    );
+      });
+    } else {
+      setAudioLevel(0);
+    }
 
     return () => {
-      unsubscribe();
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
-  }, []);
+  }, [isRecording]);
 
   useEffect(() => {
     const loadRecordings = async () => {
@@ -101,6 +106,22 @@ export default function MainView() {
           setError(result.error);
         } else {
           setRecordings(result.recordings);
+
+          // Initialize notes from the recordings data
+          const initialMeetingNotes: Record<string, string> = {};
+          const initialManualNotes: Record<string, string> = {};
+
+          result.recordings.forEach((recording: Recording) => {
+            if (recording.aiNotes) {
+              initialMeetingNotes[recording.path] = recording.aiNotes;
+            }
+            if (recording.manualNotes) {
+              initialManualNotes[recording.path] = recording.manualNotes;
+            }
+          });
+
+          setMeetingNotes(initialMeetingNotes);
+          setManualNotes(initialManualNotes);
         }
       } catch (err) {
         setError('Failed to load recordings');
@@ -183,42 +204,6 @@ export default function MainView() {
       const errorMessage =
         err instanceof Error ? err.message : 'An unknown error occurred';
 
-      setError(errorMessage);
-    }
-  };
-
-  const handlePlayRecording = async (recording: Recording): Promise<void> => {
-    try {
-      const result = await window.electron.audioRecorder.playRecording(
-        recording.path,
-      );
-      if (result.error) {
-        setError(result.error);
-      }
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to play recording';
-      setError(errorMessage);
-    }
-  };
-
-  const handleDeleteRecording = async (recording: Recording): Promise<void> => {
-    try {
-      const result = await window.electron.audioRecorder.deleteRecording(
-        recording.path,
-      );
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-      // Remove the deleted recording from the state
-      setRecordings((prev) =>
-        prev.filter((rec) => rec.path !== recording.path),
-      );
-      setError(null);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to delete recording';
       setError(errorMessage);
     }
   };
@@ -326,7 +311,7 @@ export default function MainView() {
           resolvedTheme === 'dark' ? 'text-neutral-400' : 'text-neutral-600'
         }`}
       >
-        Minimix
+        Mini Mix
       </div>
     );
   };
@@ -462,7 +447,7 @@ export default function MainView() {
           path="/"
           element={
             <div className="flex flex-col items-center h-[calc(100vh-36px)]">
-              <div className="flex flex-col items-center justify-center min-h-[180px] pt-12 pb-8">
+              <div className="flex flex-col items-center justify-center min-h-[180px] pt-16 pb-12">
                 <RecordButton
                   isRecording={isRecording}
                   audioLevel={audioLevel}
@@ -475,8 +460,6 @@ export default function MainView() {
               <div className="flex-1 w-full overflow-y-auto">
                 <RecordingsList
                   recordings={recordings}
-                  onPlay={handlePlayRecording}
-                  onDelete={handleDeleteRecording}
                   onStopRecording={isRecording ? toggleRecording : undefined}
                   elapsedTime={elapsedTime}
                 />
@@ -489,7 +472,6 @@ export default function MainView() {
           element={
             <RecordingView
               recordings={recordings}
-              onPlay={handlePlayRecording}
               onGenerateNotes={handleGenerateNotes}
               onUpdateTitle={handleUpdateTitle}
               isGeneratingNotes={isGeneratingNotes}

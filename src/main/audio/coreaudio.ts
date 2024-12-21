@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { promisify } from 'util';
 import { exec, spawn } from 'child_process';
 import * as fs from 'fs';
@@ -29,7 +31,7 @@ interface SystemProfilerAudioType {
   items?: SystemProfilerDevice[];
 }
 
-class CoreAudioRecorder implements IAudioRecorder {
+export default class CoreAudioRecorder implements IAudioRecorder {
   private isRecording: boolean = false;
 
   private currentProcess: any = null;
@@ -39,6 +41,8 @@ class CoreAudioRecorder implements IAudioRecorder {
   private monitorProcess: any = null;
 
   private currentRecordingPath: string = '';
+
+  private cleanup: (() => void) | null = null;
 
   constructor() {
     this.isRecording = false;
@@ -152,7 +156,7 @@ class CoreAudioRecorder implements IAudioRecorder {
     }
   }
 
-  private startMonitoring() {
+  private startMonitoring(): void {
     if (!this.isRecording) return;
 
     // Create a continuous monitoring process that outputs raw audio data
@@ -168,61 +172,124 @@ class CoreAudioRecorder implements IAudioRecorder {
         '1', // Mono
         '-b',
         '16', // 16-bit depth
+        '--buffer',
+        '32000', // Smaller buffer for lower latency
         '-', // Output to stdout
       ],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, AUDIODEV: 'default' },
+      },
     );
 
-    // Buffer to store audio samples
-    const BUFFER_SIZE = 4410; // 0.1 seconds of audio at 44.1kHz
+    // Smaller buffer size for more frequent updates
+    const BUFFER_SIZE = 2205; // 0.05 seconds of audio at 44.1kHz
     let audioBuffer = Buffer.alloc(0);
     let lastUpdate = Date.now();
+    let hasReceivedData = false;
 
-    this.monitorProcess.stdout.on('data', (data: Buffer) => {
-      // Skip the WAV header (44 bytes) if present
-      const startOffset = audioBuffer.length === 0 ? 44 : 0;
-
-      // Append new data to our buffer
-      audioBuffer = Buffer.concat([audioBuffer, data.slice(startOffset)]);
-
-      // Process the buffer when we have enough samples
-      while (audioBuffer.length >= BUFFER_SIZE * 2) {
-        // Convert buffer to 16-bit samples
-        const samples = new Int16Array(audioBuffer.buffer, 0, BUFFER_SIZE);
-
-        // Calculate RMS of the samples
-        let sum = 0;
-        for (let index = 0; index < samples.length; index += 1) {
-          sum += (samples[index] / 32768) ** 2; // Normalize to [-1, 1] and square
-        }
-        const rms = Math.sqrt(sum / samples.length);
-
-        // Update the level with aggressive scaling for better visibility
-        const normalizedLevel = Math.min(1, rms * 30);
-
-        const now = Date.now();
-        if (now - lastUpdate >= 16) {
-          // Update at ~60fps
-          this.lastLevel = this.lastLevel * 0.2 + normalizedLevel * 0.8;
-          lastUpdate = now;
-        }
-
-        // Remove processed samples from buffer
-        audioBuffer = audioBuffer.slice(BUFFER_SIZE * 2);
-      }
-    });
-
+    // Handle process errors
     this.monitorProcess.on('error', () => {
       if (this.isRecording) {
-        setTimeout(() => this.startMonitoring(), 1000);
+        this.restartMonitoring();
       }
     });
 
+    // Handle process exit
     this.monitorProcess.on('exit', () => {
       if (this.isRecording) {
-        setTimeout(() => this.startMonitoring(), 100);
+        this.restartMonitoring();
       }
     });
+
+    // Handle stdout errors
+    this.monitorProcess.stdout.on('error', () => {
+      if (this.isRecording) {
+        this.restartMonitoring();
+      }
+    });
+
+    // Add watchdog timer
+    const watchdog = setInterval(() => {
+      const now = Date.now();
+      if (hasReceivedData && now - lastUpdate > 1000) {
+        // No updates for 1 second
+        this.restartMonitoring();
+        clearInterval(watchdog);
+      }
+    }, 1000);
+
+    // Process audio data
+    this.monitorProcess.stdout.on('data', (data: Buffer) => {
+      try {
+        hasReceivedData = true;
+        const startOffset = audioBuffer.length === 0 ? 44 : 0;
+        audioBuffer = Buffer.concat([audioBuffer, data.slice(startOffset)]);
+
+        while (audioBuffer.length >= BUFFER_SIZE * 2) {
+          const samples = new Int16Array(
+            audioBuffer.buffer.slice(
+              audioBuffer.byteOffset,
+              audioBuffer.byteOffset + BUFFER_SIZE * 2,
+            ),
+          );
+
+          let sum = 0;
+          // Process fewer samples for faster response
+          const stride = 2; // Skip every other sample
+          for (let i = 0; i < samples.length; i += stride) {
+            const normalized = samples[i] / 32768.0;
+            sum += normalized * normalized;
+          }
+          const rms = Math.sqrt(sum / (samples.length / stride));
+
+          const now = Date.now();
+          if (now - lastUpdate >= 8) {
+            // Update at ~120fps
+
+            const normalizedLevel = Math.min(1, rms * 20); // Increased sensitivity
+            // Faster response to volume increases, even faster decay
+            this.lastLevel =
+              normalizedLevel > this.lastLevel
+                ? this.lastLevel * 0.5 + normalizedLevel * 0.5
+                : this.lastLevel * 0.6 + normalizedLevel * 0.4; // Increased decay rate
+            lastUpdate = now;
+          }
+
+          audioBuffer = audioBuffer.slice(BUFFER_SIZE * 2);
+        }
+
+        // Keep buffer small
+        if (audioBuffer.length > BUFFER_SIZE * 4) {
+          audioBuffer = audioBuffer.slice(-BUFFER_SIZE * 4);
+        }
+      } catch (error) {
+        audioBuffer = Buffer.alloc(0);
+      }
+    });
+
+    // Remove the return statement since we've declared void return type
+    const cleanup = () => {
+      clearInterval(watchdog);
+      if (this.monitorProcess) {
+        this.monitorProcess.kill('SIGINT');
+      }
+    };
+
+    // Store cleanup function for later use if needed
+    this.cleanup = cleanup;
+  }
+
+  private restartMonitoring() {
+    if (this.monitorProcess) {
+      this.monitorProcess.kill('SIGINT');
+      this.monitorProcess = null;
+    }
+    setTimeout(() => {
+      if (this.isRecording) {
+        this.startMonitoring();
+      }
+    }, 100);
   }
 
   async stopRecording(): Promise<{ error?: string }> {
@@ -231,6 +298,10 @@ class CoreAudioRecorder implements IAudioRecorder {
     }
 
     try {
+      if (this.cleanup) {
+        this.cleanup();
+        this.cleanup = null;
+      }
       if (this.currentProcess) {
         this.currentProcess.kill('SIGINT');
         this.currentProcess = null;
@@ -263,5 +334,3 @@ class CoreAudioRecorder implements IAudioRecorder {
     return this.currentRecordingPath;
   }
 }
-
-export default CoreAudioRecorder;

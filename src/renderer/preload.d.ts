@@ -34,6 +34,7 @@ declare global {
         getPinnedState: () => Promise<{ isPinned: boolean; error?: string }>;
         listRecordings: () => Promise<{ recordings: RecordingInfo[]; error?: string }>;
         playRecording: (path: string) => Promise<{ success?: boolean; error?: string }>;
+        getAudioDuration: (path: string) => Promise<{ duration: number; error?: string }>;
         deleteRecording: (path: string) => Promise<{ success?: boolean; error?: string }>;
         transcribeRecording: (path: string) => Promise<{ success?: boolean; text?: string; error?: string }>;
         createSummary: (path: string) => Promise<{ success?: boolean; summary?: string; error?: string }>;

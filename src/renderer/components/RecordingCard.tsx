@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Play, Trash2 } from 'lucide-react';
+import React from 'react';
+import { Play, Wand2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import type { Recording } from '../types/recording';
@@ -8,8 +8,7 @@ import { getDefaultTitle } from '../utils/dateFormatting';
 
 interface RecordingCardProps {
   recording: Recording;
-  onPlay: (recording: Recording) => void;
-  onDelete: (recording: Recording) => void;
+  hasAiSummary?: boolean;
 }
 
 const formatDuration = (seconds: number): string => {
@@ -51,22 +50,14 @@ const getDurationClasses = (theme: 'light' | 'dark'): string => {
 
 const getPlayButtonClasses = (theme: 'light' | 'dark'): string => {
   return theme === 'dark'
-    ? 'text-app-dark-text-secondary hover:text-app-dark-text-primary hover:bg-app-dark-surface/50'
-    : 'text-app-light-text-secondary hover:text-app-light-text-primary hover:bg-app-light-surface/50';
-};
-
-const getDeleteButtonClasses = (theme: 'light' | 'dark'): string => {
-  return theme === 'dark'
-    ? 'text-app-dark-text-secondary hover:text-red-400 hover:bg-app-dark-surface/50'
-    : 'text-app-light-text-secondary hover:text-red-600 hover:bg-app-light-surface/50';
+    ? 'text-app-dark-text-secondary hover:text-app-dark-text-primary bg-neutral-800 hover:bg-neutral-700'
+    : 'text-app-light-text-secondary hover:text-app-light-text-primary bg-neutral-100 hover:bg-neutral-200';
 };
 
 export default function RecordingCard({
   recording,
-  onPlay,
-  onDelete,
+  hasAiSummary = false,
 }: RecordingCardProps) {
-  const [isDeleting, setIsDeleting] = useState(false);
   const { effectiveTheme } = useTheme();
   const navigate = useNavigate();
   const date = recording.date ? new Date(recording.date) : null;
@@ -86,18 +77,18 @@ export default function RecordingCard({
 
   const defaultTitle = date ? getDefaultTitle(date) : 'Untitled Recording';
 
-  const handleDelete = async (rec: Recording) => {
-    if (isDeleting) return;
-    setIsDeleting(true);
-    try {
-      await onDelete(rec);
-    } catch (error) {
-      setIsDeleting(false);
-    }
+  const handleCardClick = () => {
+    navigate(`/recording/${encodeURIComponent(recording.path)}`, {
+      state: { shouldAutoPlay: false },
+    });
   };
 
-  const handleCardClick = () => {
-    navigate(`/recording/${encodeURIComponent(recording.path)}`);
+  const handlePlayClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    // Simply navigate with autoPlay flag
+    navigate(`/recording/${encodeURIComponent(recording.path)}`, {
+      state: { shouldAutoPlay: true },
+    });
   };
 
   return (
@@ -112,21 +103,18 @@ export default function RecordingCard({
       )}`}
     >
       <div className="flex flex-col flex-1 min-w-0">
+        <span className={`text-xs mb-1 ${getTimeClasses(effectiveTheme)}`}>
+          {formattedDateTime}
+        </span>
         <span
-          className={`text-base font-medium mb-1 ${getDateClasses(effectiveTheme)}`}
+          className={`text-xl font-medium mb-2 ${getDateClasses(effectiveTheme)}`}
         >
           {recording.title || defaultTitle}
-        </span>
-        <span className={`text-xs mb-2 ${getTimeClasses(effectiveTheme)}`}>
-          {formattedDateTime}
         </span>
         <div className="flex items-center justify-between">
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onPlay(recording);
-            }}
+            onClick={handlePlayClick}
             className={`flex items-center gap-2 p-2 transition-colors rounded-md ${getPlayButtonClasses(
               effectiveTheme,
             )}`}
@@ -139,22 +127,18 @@ export default function RecordingCard({
                 : 'Processing...'}
             </span>
           </button>
-          <div className="flex transition-opacity opacity-0 group-hover:opacity-100">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete(recording);
-              }}
-              disabled={isDeleting}
-              className={`p-2 transition-colors rounded-md ${getDeleteButtonClasses(
-                effectiveTheme,
-              )} ${isDeleting ? 'opacity-50' : ''}`}
-              aria-label="Delete recording"
+          {hasAiSummary && (
+            <div
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-full border ${
+                effectiveTheme === 'dark'
+                  ? 'text-app-dark-text-tertiary border-app-dark-border/50'
+                  : 'text-app-light-text-tertiary border-app-light-border'
+              }`}
             >
-              <Trash2 size={16} />
-            </button>
-          </div>
+              <Wand2 size={16} />
+              <span className="text-xs">AI Summary</span>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>

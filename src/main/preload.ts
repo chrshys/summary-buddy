@@ -50,6 +50,8 @@ const electronHandler = {
     getPinnedState: () => ipcRenderer.invoke('get-pinned-state'),
     listRecordings: () => ipcRenderer.invoke('list-recordings'),
     playRecording: (path: string) => ipcRenderer.invoke('play-recording', path),
+    getAudioDuration: (path: string) =>
+      ipcRenderer.invoke('get-audio-duration', path),
     deleteRecording: (path: string) =>
       ipcRenderer.invoke('delete-recording', path),
     transcribeRecording: (path: string) =>

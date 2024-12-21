@@ -6,4 +6,7 @@ export interface Recording {
   title?: string | null;
   isActive?: boolean;
   folderPath?: string;
+  hasAiSummary?: boolean;
+  aiNotes?: string;
+  manualNotes?: string;
 }

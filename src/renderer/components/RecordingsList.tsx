@@ -6,33 +6,18 @@ import ActiveRecordingCard from './ActiveRecordingCard';
 
 export interface RecordingsListProps {
   recordings: Recording[];
-  onPlay: (recording: Recording) => Promise<void>;
-  onDelete: (recording: Recording) => Promise<void>;
   onStopRecording?: () => void;
   elapsedTime: number;
 }
 
 export default function RecordingsList({
   recordings,
-  onPlay,
-  onDelete,
   onStopRecording = undefined,
   elapsedTime,
 }: RecordingsListProps) {
-  const handleDelete = async (recording: Recording) => {
-    try {
-      await onDelete(recording);
-    } catch (error: unknown) {
-      // Type guard to check if error is a NodeJS.ErrnoException
-      if (error instanceof Error && 'code' in error) {
-        if (error.code !== 'ENOENT') {
-          /* empty */
-        }
-      } else {
-        /* empty */
-      }
-    }
-  };
+  // Get the active recording's path if it exists
+  const activeRecording = recordings.find((r) => r.isActive);
+  const activeRecordingPath = activeRecording?.path;
 
   return (
     <div className="w-full overflow-y-auto">
@@ -43,14 +28,14 @@ export default function RecordingsList({
               key="active-recording"
               elapsedTime={elapsedTime}
               onStopRecording={onStopRecording}
+              recordingPath={activeRecordingPath}
             />
           )}
           {recordings.map((recording) => (
             <RecordingCard
               key={recording.path}
               recording={recording}
-              onPlay={onPlay}
-              onDelete={handleDelete}
+              hasAiSummary={recording.hasAiSummary}
             />
           ))}
         </AnimatePresence>
