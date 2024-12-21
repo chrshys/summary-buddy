@@ -444,9 +444,10 @@ ipcMain.handle('start-recording', async () => {
       if (audioRecorder) {
         const audioLevel = audioRecorder.getAudioLevel();
         const level = typeof audioLevel === 'number' ? audioLevel : 0;
+        console.log('Sending audio level to renderer:', level);
         mainWindow?.webContents.send('audio-level', level);
       }
-    }, 50);
+    }, 16);
 
     setRecordingState(true);
     return { success: true, outputPath };

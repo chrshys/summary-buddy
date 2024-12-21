@@ -5,7 +5,6 @@ import RecordButton from './RecordButton';
 import RecordingsList from './RecordingsList';
 import RecordingView from './RecordingView';
 import type { Recording } from '../types/recording';
-import type { DiarizedSegment } from '../../main/services/diarization';
 import { useTheme } from '../contexts/ThemeContext';
 import { resolveTheme } from '../utils/theme';
 
@@ -32,12 +31,6 @@ export default function MainView() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [recordings, setRecordings] = useState<Recording[]>([]);
-  const [transcriptions, setTranscriptions] = useState<
-    Record<string, { segments: DiarizedSegment[] }>
-  >({});
-  const [isTranscribing, setIsTranscribing] = useState<Record<string, boolean>>(
-    {},
-  );
   const [meetingNotes, setMeetingNotes] = useState<Record<string, string>>({});
   const [isGeneratingNotes, setIsGeneratingNotes] = useState<
     Record<string, boolean>
@@ -121,7 +114,11 @@ export default function MainView() {
     const recordingStartedUnsubscribe = window.electron.ipcRenderer.on(
       'recording-started',
       (recording: Recording) => {
-        setRecordings((prev) => [{ ...recording, isActive: true }, ...prev]);
+        setRecordings((prev) => {
+          const newRecordings = [{ ...recording, isActive: true }, ...prev];
+          navigate(`/recording/${encodeURIComponent(recording.path)}`);
+          return newRecordings;
+        });
       },
     );
 
@@ -140,7 +137,7 @@ export default function MainView() {
       recordingStartedUnsubscribe();
       recordingStoppedUnsubscribe();
     };
-  }, []);
+  }, [navigate]);
 
   const toggleRecording = async (): Promise<void> => {
     try {
@@ -244,30 +241,6 @@ export default function MainView() {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
-  const handleTranscribe = async (recording: Recording) => {
-    try {
-      setIsTranscribing({ ...isTranscribing, [recording.path]: true });
-      const result = await window.electron.audioRecorder.transcribeRecording(
-        recording.path,
-      );
-
-      if (result.error) {
-        setError(result.error);
-      } else if (result.segments) {
-        setTranscriptions({
-          ...transcriptions,
-          [recording.path]: { segments: result.segments },
-        });
-      }
-    } catch (err) {
-      setError(
-        typeof err === 'string' ? err : 'Failed to transcribe recording',
-      );
-    } finally {
-      setIsTranscribing({ ...isTranscribing, [recording.path]: false });
-    }
-  };
-
   const handleGenerateNotes = async (recording: Recording) => {
     try {
       setIsGeneratingNotes((prev) => ({
@@ -277,7 +250,7 @@ export default function MainView() {
 
       const result = await window.electron.createSummary(recording.path);
       if (result.error) {
-        console.error('Error generating notes:', result.error);
+        setError(result.error);
         return;
       }
 
@@ -288,7 +261,7 @@ export default function MainView() {
         }));
       }
     } catch (err) {
-      console.error('Error generating notes:', err);
+      setError('Failed to generate notes');
     } finally {
       setIsGeneratingNotes((prev) => ({
         ...prev,
@@ -300,13 +273,13 @@ export default function MainView() {
   const handleUpdateTitle = useCallback(
     async (recording: Recording, newTitle: string) => {
       try {
-        // Update the recording title in the recordings array
+        // Update the recording title in the recordings array first
         const updatedRecordings = recordings.map((r) =>
           r.path === recording.path ? { ...r, title: newTitle } : r,
         );
         setRecordings(updatedRecordings);
 
-        // Save the updated title to the metadata file
+        // Then save to the metadata file
         await window.electron.audioRecorder.updateRecordingTitle(
           recording.path,
           newTitle,
@@ -459,10 +432,8 @@ export default function MainView() {
                   recordings={recordings}
                   onPlay={handlePlayRecording}
                   onDelete={handleDeleteRecording}
-                  onTranscribe={handleTranscribe}
                   onStopRecording={isRecording ? toggleRecording : undefined}
                   elapsedTime={elapsedTime}
-                  isTranscribing={isTranscribing}
                 />
               </div>
             </div>
@@ -478,6 +449,10 @@ export default function MainView() {
               onUpdateTitle={handleUpdateTitle}
               isGeneratingNotes={isGeneratingNotes}
               meetingNotes={meetingNotes}
+              isRecording={isRecording}
+              elapsedTime={elapsedTime}
+              onStopRecording={toggleRecording}
+              audioLevel={audioLevel}
             />
           }
         />

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Trash2, FileText, Loader } from 'lucide-react';
+import { Play, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import type { Recording } from '../types/recording';
@@ -9,8 +9,6 @@ interface RecordingCardProps {
   recording: Recording;
   onPlay: (recording: Recording) => void;
   onDelete: (recording: Recording) => void;
-  onTranscribe: (recording: Recording) => Promise<void>;
-  isTranscribing?: boolean;
 }
 
 const formatDuration = (seconds: number): string => {
@@ -66,13 +64,25 @@ export default function RecordingCard({
   recording,
   onPlay,
   onDelete,
-  onTranscribe,
-  isTranscribing = false,
 }: RecordingCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const { effectiveTheme } = useTheme();
   const navigate = useNavigate();
   const date = recording.date ? new Date(recording.date) : null;
+
+  const formattedDateTime = date
+    ? `${date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })} • ${date
+        .toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        })
+        .toLowerCase()}`
+    : '';
+
   const formattedDate = date
     ? `${date.toLocaleDateString('en-US', {
         month: 'short',
@@ -80,14 +90,6 @@ export default function RecordingCard({
         year: 'numeric',
       })}`
     : 'Untitled Recording';
-
-  const formattedTime = date
-    ? date.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      })
-    : '';
 
   const handleDelete = async (rec: Recording) => {
     if (isDeleting) return;
@@ -129,16 +131,14 @@ export default function RecordingCard({
           <Play size={16} />
         </button>
         <div className="flex flex-col flex-1 min-w-0">
-          <div className="flex items-baseline gap-2">
-            <span
-              className={`text-xs truncate ${getDateClasses(effectiveTheme)}`}
-            >
-              {formattedDate}
-            </span>
-            <span className={`text-xs ${getTimeClasses(effectiveTheme)}`}>
-              {formattedTime}
-            </span>
-          </div>
+          <span className={`text-xs mb-1 ${getTimeClasses(effectiveTheme)}`}>
+            {formattedDateTime}
+          </span>
+          <span
+            className={`text-base font-medium truncate ${getDateClasses(effectiveTheme)}`}
+          >
+            {recording.title || formattedDate}
+          </span>
           <div className={`text-xs ${getDurationClasses(effectiveTheme)}`}>
             {recording.duration
               ? formatDuration(Math.round(recording.duration))
@@ -146,24 +146,6 @@ export default function RecordingCard({
           </div>
         </div>
         <div className="flex ml-4 transition-opacity opacity-0 group-hover:opacity-100">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onTranscribe(recording);
-            }}
-            disabled={isTranscribing}
-            className={`p-2 transition-colors rounded-md ${getPlayButtonClasses(
-              effectiveTheme,
-            )} ${isTranscribing ? 'opacity-50' : ''}`}
-            aria-label="Transcribe recording"
-          >
-            {isTranscribing ? (
-              <Loader size={16} className="animate-spin" />
-            ) : (
-              <FileText size={16} />
-            )}
-          </button>
           <button
             type="button"
             onClick={(e) => {
