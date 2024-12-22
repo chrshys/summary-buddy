@@ -8,12 +8,16 @@ export interface RecordingsListProps {
   recordings: Recording[];
   onStopRecording?: () => void;
   elapsedTime: number;
+  isGeneratingNotes: Record<string, boolean>;
+  onDeleteRecording: (recording: Recording) => Promise<void>;
 }
 
 export default function RecordingsList({
   recordings,
   onStopRecording = undefined,
   elapsedTime,
+  isGeneratingNotes,
+  onDeleteRecording,
 }: RecordingsListProps) {
   // Get the active recording's path if it exists
   const activeRecording = recordings.find((r) => r.isActive);
@@ -35,7 +39,9 @@ export default function RecordingsList({
             <RecordingCard
               key={recording.path}
               recording={recording}
-              hasAiSummary={recording.hasAiSummary}
+              hasAiSummary={Boolean(recording.aiNotes)}
+              isGeneratingSummary={isGeneratingNotes[recording.path]}
+              onDelete={() => onDeleteRecording(recording)}
             />
           ))}
         </AnimatePresence>

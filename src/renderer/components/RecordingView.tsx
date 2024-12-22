@@ -5,14 +5,15 @@ import React, {
   useMemo,
   useCallback,
 } from 'react';
-import { useParams } from 'react-router-dom';
-import { FileText, Loader, Wand2 } from 'lucide-react';
+import { useParams, useLocation } from 'react-router-dom';
+import { Loader, Wand2 } from 'lucide-react';
 import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
 import { getDefaultTitle } from '../utils/dateFormatting';
-import RecordButton from './RecordButton';
+import AudioPlayer from './AudioPlayer';
+import RecordingVisualizer from './RecordingVisualizer';
 
 // Add NodeJS type for setTimeout
 type TimeoutRef = ReturnType<typeof setTimeout>;
@@ -85,6 +86,7 @@ export default function RecordingView({
   manualNotes = {},
 }: RecordingViewProps) {
   const { recordingPath } = useParams<{ recordingPath: string }>();
+  const location = useLocation();
   const { effectiveTheme } = useTheme();
   const [editedTitle, setEditedTitle] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('my-notes');
@@ -93,6 +95,11 @@ export default function RecordingView({
   const notesTimeoutRef = useRef<TimeoutRef>();
   const titleTimeoutRef = useRef<TimeoutRef>();
   const [isTitleEditing, setIsTitleEditing] = useState(false);
+  const [showFinishedPrompt, setShowFinishedPrompt] = useState(false);
+
+  // Get autoPlay from location state
+  const shouldAutoPlay =
+    (location.state as { shouldAutoPlay?: boolean })?.shouldAutoPlay || false;
 
   const decodedPath = recordingPath ? decodeURIComponent(recordingPath) : '';
   const recording = useMemo(
@@ -234,6 +241,103 @@ export default function RecordingView({
     setIsTitleEditing(false);
   }, []);
 
+  useEffect(() => {
+    if (!isRecording && showFinishedPrompt === false) {
+      setShowFinishedPrompt(true);
+      setActiveTab('summary');
+    }
+  }, [isRecording, showFinishedPrompt]);
+
+  const renderSummaryContent = () => {
+    if (!currentRecording) return null;
+    if (isRecording) {
+      return (
+        <p
+          className={`text-sm ${
+            effectiveTheme === 'dark'
+              ? 'text-app-dark-text-secondary'
+              : 'text-app-light-text-secondary'
+          }`}
+        >
+          AI summary will be available when recording has ended
+        </p>
+      );
+    }
+
+    if (showFinishedPrompt) {
+      return (
+        <div className="space-y-4">
+          <p
+            className={`text-sm ${
+              effectiveTheme === 'dark'
+                ? 'text-app-dark-text-primary'
+                : 'text-app-light-text-primary'
+            }`}
+          >
+            Your recording is finished, would you like me to summarize it for
+            you?
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setShowFinishedPrompt(false);
+              if (currentRecording) {
+                onGenerateNotes(currentRecording);
+              }
+            }}
+            disabled={isGeneratingNotes[currentRecording.path]}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+              effectiveTheme === 'dark'
+                ? 'bg-app-dark-surface text-app-dark-text-primary hover:bg-app-dark-surface/80'
+                : 'bg-app-light-surface text-app-light-text-primary hover:bg-app-light-surface/80'
+            } ${isGeneratingNotes[currentRecording.path] ? 'opacity-50' : ''}`}
+          >
+            {isGeneratingNotes[currentRecording.path] ? (
+              <>
+                <Loader size={20} className="animate-spin" />
+                Generating Notes...
+              </>
+            ) : (
+              <>
+                <Wand2 size={20} />
+                Generate AI Summary
+              </>
+            )}
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          if (currentRecording) {
+            onGenerateNotes(currentRecording);
+          }
+        }}
+        disabled={isGeneratingNotes[currentRecording.path]}
+        className={`inline-flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+          effectiveTheme === 'dark'
+            ? 'bg-app-dark-surface text-app-dark-text-primary hover:bg-app-dark-surface/80'
+            : 'bg-app-light-surface text-app-light-text-primary hover:bg-app-light-surface/80'
+        } ${isGeneratingNotes[currentRecording.path] ? 'opacity-50' : ''}`}
+      >
+        {isGeneratingNotes[currentRecording.path] ? (
+          <>
+            <Loader size={20} className="animate-spin" />
+            Generating Notes...
+          </>
+        ) : (
+          <>
+            <Wand2 size={20} />
+            Generate AI Summary
+          </>
+        )}
+      </button>
+    );
+  };
+
   if (!currentRecording) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -248,30 +352,11 @@ export default function RecordingView({
 
   return (
     <div className="flex flex-col items-center h-[calc(100vh-36px)]">
-      <div className="flex flex-col items-center justify-center min-h-[180px] pt-16 pb-12 w-full">
-        {isRecording ? (
-          <RecordButton
-            isRecording={isRecording}
-            audioLevel={audioLevel}
-            elapsedTime={elapsedTime}
-            onToggleRecording={onStopRecording}
-          />
-        ) : (
-          currentRecording && (
-            <div className="flex items-center justify-center p-4">
-              <p className="text-sm text-neutral-500">
-                Audio player coming soon...
-              </p>
-            </div>
-          )
-        )}
-      </div>
-
       <div className="flex-1 w-full overflow-y-auto">
-        <div className="px-4">
-          <div className="mb-8">
+        <div className="px-4 pt-4">
+          <div className="mb-6">
             <p
-              className={`text-xs mb-3 pl-3 ${
+              className={`text-xs mb-2 pl-3 ${
                 effectiveTheme === 'dark'
                   ? 'text-app-dark-text-secondary'
                   : 'text-app-light-text-secondary'
@@ -322,6 +407,24 @@ export default function RecordingView({
             </div>
           </div>
 
+          <div className="flex flex-col items-center justify-center mb-6 w-full">
+            {isRecording ? (
+              <RecordingVisualizer
+                audioLevel={audioLevel}
+                elapsedTime={elapsedTime}
+                onStopRecording={onStopRecording}
+              />
+            ) : (
+              currentRecording && (
+                <AudioPlayer
+                  src={`file://${currentRecording.path}`}
+                  autoPlay={shouldAutoPlay}
+                  duration={currentRecording.duration}
+                />
+              )
+            )}
+          </div>
+
           <div className="pb-8">
             <div
               className={`flex flex-col p-3 transition-all duration-200 border rounded-lg ${
@@ -330,13 +433,13 @@ export default function RecordingView({
                   : 'bg-app-light-surface border-app-light-border'
               }`}
             >
-              <div className="flex space-x-4">
+              <div className="flex space-x-1 mb-4 p-1 rounded-lg bg-black/5 dark:bg-black/20">
                 <button
                   type="button"
-                  className={`py-1.5 text-xs font-medium transition-colors focus:outline-none ${
+                  className={`flex-1 py-2 px-4 text-xs font-medium rounded-md transition-all duration-200 ${
                     activeTab === 'my-notes'
-                      ? `bg-${effectiveTheme === 'dark' ? '[#3B4252]' : '[#E5E9F0]'} text-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-primary shadow-sm border-b-2 border-b-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-primary`
-                      : `bg-${effectiveTheme === 'dark' ? 'black/20' : 'black/5'} text-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-secondary hover:text-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-primary hover:bg-${effectiveTheme === 'dark' ? '[#2E3440]' : '[#D8DEE9]'}`
+                      ? `${effectiveTheme === 'dark' ? 'bg-[#3B4252]' : 'bg-white'} text-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-primary shadow-sm`
+                      : `text-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-secondary hover:text-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-primary`
                   }`}
                   onClick={() => setActiveTab('my-notes')}
                 >
@@ -344,19 +447,19 @@ export default function RecordingView({
                 </button>
                 <button
                   type="button"
-                  className={`py-1.5 text-xs font-medium transition-colors focus:outline-none inline-flex items-center gap-2 ${
+                  className={`flex-1 py-2 px-4 text-xs font-medium rounded-md transition-all duration-200 inline-flex items-center justify-center gap-2 ${
                     activeTab === 'summary'
-                      ? `bg-${effectiveTheme === 'dark' ? '[#3B4252]' : '[#E5E9F0]'} text-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-primary shadow-sm border-b-2 border-b-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-primary`
-                      : `bg-${effectiveTheme === 'dark' ? 'black/20' : 'black/5'} text-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-secondary hover:text-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-primary hover:bg-${effectiveTheme === 'dark' ? '[#2E3440]' : '[#D8DEE9]'}`
+                      ? `${effectiveTheme === 'dark' ? 'bg-[#3B4252]' : 'bg-white'} text-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-primary shadow-sm`
+                      : `text-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-secondary hover:text-${effectiveTheme === 'dark' ? 'app-dark' : 'app-light'}-text-primary`
                   }`}
                   onClick={() => setActiveTab('summary')}
                 >
                   <Wand2 size={16} />
-                  AI Summary
+                  Summary
                 </button>
               </div>
 
-              <div className="min-h-[200px] mt-6">
+              <div className="min-h-[200px]">
                 {(() => {
                   if (activeTab === 'my-notes') {
                     return (
@@ -371,13 +474,40 @@ export default function RecordingView({
                               : 'bg-app-light-surface border-app-light-border text-app-light-text-primary'
                           }`}
                         />
+                        {!isRecording &&
+                          !meetingNotes[currentRecording.path] && (
+                            <button
+                              type="button"
+                              onClick={() => onGenerateNotes(currentRecording)}
+                              disabled={
+                                isGeneratingNotes[currentRecording.path]
+                              }
+                              className={`self-end inline-flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                                effectiveTheme === 'dark'
+                                  ? 'bg-app-dark-surface text-app-dark-text-primary hover:bg-app-dark-surface/80'
+                                  : 'bg-app-light-surface text-app-light-text-primary hover:bg-app-light-surface/80'
+                              } ${isGeneratingNotes[currentRecording.path] ? 'opacity-50' : ''}`}
+                            >
+                              {isGeneratingNotes[currentRecording.path] ? (
+                                <>
+                                  <Loader size={20} className="animate-spin" />
+                                  Generating Notes...
+                                </>
+                              ) : (
+                                <>
+                                  <Wand2 size={20} />
+                                  Generate AI Summary
+                                </>
+                              )}
+                            </button>
+                          )}
                       </div>
                     );
                   }
 
                   if (meetingNotes[currentRecording.path]) {
                     return (
-                      <div>
+                      <div className="min-h-[400px]">
                         <div
                           className={`prose prose-sm max-w-none leading-relaxed pb-8 ${
                             effectiveTheme === 'dark'
@@ -397,37 +527,8 @@ export default function RecordingView({
                   }
 
                   return (
-                    <div className="py-8 text-center">
-                      <div
-                        className={`p-4 rounded-lg border ${
-                          effectiveTheme === 'dark'
-                            ? 'bg-app-dark-surface/40 border-app-dark-border/50'
-                            : 'bg-app-light-surface border-app-light-border'
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => onGenerateNotes(currentRecording)}
-                          disabled={isGeneratingNotes[currentRecording.path]}
-                          className={`inline-flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
-                            effectiveTheme === 'dark'
-                              ? 'bg-app-dark-surface text-app-dark-text-primary hover:bg-app-dark-surface/80'
-                              : 'bg-app-light-surface text-app-light-text-primary hover:bg-app-light-surface/80'
-                          } ${isGeneratingNotes[currentRecording.path] ? 'opacity-50' : ''}`}
-                        >
-                          {isGeneratingNotes[currentRecording.path] ? (
-                            <>
-                              <Loader size={20} className="animate-spin" />
-                              Generating Notes...
-                            </>
-                          ) : (
-                            <>
-                              <FileText size={20} />
-                              Generate Notes
-                            </>
-                          )}
-                        </button>
-                      </div>
+                    <div className="py-8 text-center min-h-[400px] flex flex-col">
+                      {renderSummaryContent()}
                     </div>
                   );
                 })()}

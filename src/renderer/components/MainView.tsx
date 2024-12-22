@@ -245,6 +245,12 @@ export default function MainView() {
           ...prev,
           [recording.path]: result.notes!,
         }));
+        // Update the recordings array with the new aiNotes
+        setRecordings((prev) =>
+          prev.map((r) =>
+            r.path === recording.path ? { ...r, aiNotes: result.notes } : r,
+          ),
+        );
       }
     } catch (err) {
       setError('Failed to generate notes');
@@ -269,8 +275,7 @@ export default function MainView() {
         // Then save to the metadata file in the background
         await window.electron.audioRecorder
           .updateRecordingTitle(recording.path, newTitle)
-          .catch((err) => {
-            console.error('Failed to save title:', err);
+          .catch(() => {
             // Revert on error
             setRecordings((prevRecordings) =>
               prevRecordings.map((r) =>
@@ -281,8 +286,7 @@ export default function MainView() {
             );
             setError('Failed to update recording title');
           });
-      } catch (err) {
-        console.error('Error updating title:', err);
+      } catch {
         // Revert the title change in case of error
         setRecordings((prevRecordings) =>
           prevRecordings.map((r) =>
@@ -302,11 +306,12 @@ export default function MainView() {
           <button
             type="button"
             onClick={() => navigate('/')}
+            disabled={isRecording}
             className={`p-1.5 mr-2 transition-colors rounded-md ${
               resolvedTheme === 'dark'
                 ? 'text-neutral-400 hover:text-white hover:bg-neutral-700/50'
                 : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
-            }`}
+            } ${isRecording ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <ArrowLeft size={16} />
           </button>
@@ -380,8 +385,7 @@ export default function MainView() {
         // Save in the background
         await window.electron.audioRecorder
           .saveManualNotes(recording.path, notes)
-          .catch((err) => {
-            console.error('Failed to save notes:', err);
+          .catch(() => {
             // Revert on error
             setManualNotes((prev) => ({
               ...prev,
@@ -389,13 +393,40 @@ export default function MainView() {
             }));
             setError('Failed to save notes');
           });
-      } catch (err) {
-        console.error('Error saving notes:', err);
+      } catch {
         setError('Failed to save notes');
       }
     },
     [],
   );
+
+  const handleDeleteRecording = useCallback(async (recording: Recording) => {
+    try {
+      const result = await window.electron.audioRecorder.deleteRecording(
+        recording.path,
+      );
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      // Remove the recording from state
+      setRecordings((prev) => prev.filter((r) => r.path !== recording.path));
+      // Clean up associated notes
+      setMeetingNotes((prev) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { [recording.path]: _, ...rest } = prev;
+        return rest;
+      });
+      setManualNotes((prev) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { [recording.path]: _, ...rest } = prev;
+        return rest;
+      });
+    } catch {
+      setError('Failed to delete recording');
+    }
+  }, []);
 
   // Load manual notes when recordings change
   useEffect(() => {
@@ -414,7 +445,7 @@ export default function MainView() {
             [recording.path]: result.notes,
           }));
         }
-      } catch (err) {
+      } catch {
         setError('Failed to load manual notes');
       }
     };
@@ -495,6 +526,8 @@ export default function MainView() {
                   recordings={recordings}
                   onStopRecording={isRecording ? toggleRecording : undefined}
                   elapsedTime={elapsedTime}
+                  isGeneratingNotes={isGeneratingNotes}
+                  onDeleteRecording={handleDeleteRecording}
                 />
               </div>
             </div>

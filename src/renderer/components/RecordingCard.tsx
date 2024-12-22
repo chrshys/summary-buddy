@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Wand2 } from 'lucide-react';
+import { Play, Wand2, Loader, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import type { Recording } from '../types/recording';
@@ -9,6 +9,8 @@ import { getDefaultTitle } from '../utils/dateFormatting';
 interface RecordingCardProps {
   recording: Recording;
   hasAiSummary?: boolean;
+  isGeneratingSummary?: boolean;
+  onDelete: () => Promise<void>;
 }
 
 const formatDuration = (seconds: number): string => {
@@ -57,10 +59,13 @@ const getPlayButtonClasses = (theme: 'light' | 'dark'): string => {
 export default function RecordingCard({
   recording,
   hasAiSummary = false,
+  isGeneratingSummary = false,
+  onDelete,
 }: RecordingCardProps) {
   const { effectiveTheme } = useTheme();
   const navigate = useNavigate();
   const date = recording.date ? new Date(recording.date) : null;
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const formattedDateTime = date
     ? `${date.toLocaleDateString('en-US', {
@@ -91,17 +96,40 @@ export default function RecordingCard({
     });
   };
 
+  const handleDeleteClick = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    setIsDeleting(true);
+    try {
+      await onDelete();
+    } catch (err) {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
+      exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.2 }}
       onClick={handleCardClick}
-      className={`flex flex-col p-3 transition-all duration-200 border rounded-lg group cursor-pointer ${getCardClasses(
+      className={`relative flex flex-col p-3 transition-all duration-200 border rounded-lg group cursor-pointer ${getCardClasses(
         effectiveTheme,
       )}`}
     >
+      <button
+        type="button"
+        onClick={handleDeleteClick}
+        disabled={isDeleting}
+        className={`absolute right-2 top-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity ${
+          effectiveTheme === 'dark'
+            ? 'text-neutral-500 hover:text-red-400 hover:bg-neutral-800'
+            : 'text-neutral-400 hover:text-red-500 hover:bg-neutral-100'
+        }`}
+        aria-label="Delete recording"
+      >
+        <Trash2 size={16} className={isDeleting ? 'animate-pulse' : ''} />
+      </button>
       <div className="flex flex-col flex-1 min-w-0">
         <span className={`text-xs mb-1 ${getTimeClasses(effectiveTheme)}`}>
           {formattedDateTime}
@@ -127,7 +155,7 @@ export default function RecordingCard({
                 : 'Processing...'}
             </span>
           </button>
-          {hasAiSummary && (
+          {(hasAiSummary || isGeneratingSummary) && (
             <div
               className={`flex items-center gap-1.5 px-2 py-1 rounded-full border ${
                 effectiveTheme === 'dark'
@@ -135,8 +163,17 @@ export default function RecordingCard({
                   : 'text-app-light-text-tertiary border-app-light-border'
               }`}
             >
-              <Wand2 size={16} />
-              <span className="text-xs">AI Summary</span>
+              {isGeneratingSummary ? (
+                <>
+                  <Loader size={16} className="animate-spin" />
+                  <span className="text-xs">Generating Summary...</span>
+                </>
+              ) : (
+                <>
+                  <Wand2 size={16} />
+                  <span className="text-xs">AI Summary</span>
+                </>
+              )}
             </div>
           )}
         </div>

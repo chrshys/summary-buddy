@@ -247,12 +247,13 @@ export default class CoreAudioRecorder implements IAudioRecorder {
           if (now - lastUpdate >= 8) {
             // Update at ~120fps
 
-            const normalizedLevel = Math.min(1, rms * 20); // Increased sensitivity
-            // Faster response to volume increases, even faster decay
+            const normalizedLevel = Math.min(1, rms * 8);
+            console.log('RMS:', rms, 'Normalized:', normalizedLevel);
             this.lastLevel =
               normalizedLevel > this.lastLevel
-                ? this.lastLevel * 0.5 + normalizedLevel * 0.5
-                : this.lastLevel * 0.6 + normalizedLevel * 0.4; // Increased decay rate
+                ? this.lastLevel * 0.3 + normalizedLevel * 0.7
+                : this.lastLevel * 0.4 + normalizedLevel * 0.6;
+            console.log('Final Level:', this.lastLevel);
             lastUpdate = now;
           }
 
