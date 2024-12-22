@@ -16,12 +16,12 @@ const formatTime = (seconds: number): string => {
 
 // Wave generation constants
 const WAVE_POINTS = 100;
-const BASE_AMPLITUDE = 10;
-const WAVE_FREQUENCY = 6;
+const BASE_AMPLITUDE = 8; // Reduced from 10 for subtler waves
+const WAVE_FREQUENCY = 4; // Reduced from 6 for smoother waves
 const CONTAINER_HEIGHT = 40;
 const WAVE_PADDING = 4;
-const BASE_SPEED = 10; // Base animation speed
-const MAX_SPEED = 20; // Maximum animation speed when audio is loud
+const BASE_SPEED = 15; // Reduced for smoother animation
+const MAX_SPEED = 25; // Reduced for smoother maximum speed
 
 const generateWavePath = (
   width: number,
@@ -51,11 +51,11 @@ export default function RecordingVisualizer({
   // Get the appropriate stroke color based on theme
   const getStrokeColor = (opacity: number) => {
     if (effectiveTheme === 'dark') {
-      // Dark theme: lighter grays
-      return `rgba(255, 255, 255, ${opacity})`;
+      // Dark theme: blue tint
+      return `rgba(136, 192, 208, ${opacity})`;
     }
-    // Light theme: darker grays
-    return `rgba(0, 0, 0, ${opacity})`;
+    // Light theme: subtle blue
+    return `rgba(76, 86, 106, ${opacity})`;
   };
 
   const wavePaths = useMemo(() => {
@@ -109,24 +109,31 @@ export default function RecordingVisualizer({
       }`}
     >
       <div
-        className={`p-3 rounded-lg border-2 transition-colors duration-[50ms] ${
+        className={`p-3 rounded-lg border transition-colors duration-200 ${
           effectiveTheme === 'dark'
-            ? 'bg-red-950/20 border-red-900/30'
-            : 'bg-red-50/50 border-red-200'
+            ? 'bg-app-dark-surface/40 border-app-dark-border/50'
+            : 'bg-app-light-surface border-app-light-border'
         }`}
       >
         <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={onStopRecording}
-            className={`p-3 rounded-full transition-colors ${
+            className={`p-3 rounded-full transition-all duration-200 ${
               effectiveTheme === 'dark'
-                ? 'bg-app-dark-surface hover:bg-app-dark-border'
-                : 'bg-app-light-surface hover:bg-app-light-border'
+                ? 'bg-app-dark-surface hover:bg-app-dark-border hover:shadow-[0_0_10px_rgba(136,192,208,0.1)] hover:scale-105'
+                : 'bg-app-light-surface hover:bg-app-light-border hover:shadow-md hover:scale-105'
             }`}
             aria-label="Stop Recording"
           >
-            <Square size={20} className="text-red-500" />
+            <Square
+              size={20}
+              className={`transition-colors duration-200 ${
+                effectiveTheme === 'dark'
+                  ? 'text-[#88C0D0] group-hover:text-[#88C0D0]/80'
+                  : 'text-[#5E81AC] group-hover:text-[#5E81AC]/80'
+              }`}
+            />
           </button>
 
           <div className="flex-1 flex items-center gap-2">
@@ -143,7 +150,7 @@ export default function RecordingVisualizer({
                       d={wave.path}
                       fill="none"
                       stroke={getStrokeColor(wave.opacity)}
-                      strokeWidth="2"
+                      strokeWidth="1.5"
                     />
                   ))}
                 </svg>
