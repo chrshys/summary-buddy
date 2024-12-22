@@ -1,13 +1,21 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
-import { FileText, Loader, Edit2, Wand2 } from 'lucide-react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from 'react';
+import { useParams } from 'react-router-dom';
+import { FileText, Loader, Wand2 } from 'lucide-react';
 import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
 import { getDefaultTitle } from '../utils/dateFormatting';
 import RecordButton from './RecordButton';
-import AudioPlayer from './AudioPlayer';
+
+// Add NodeJS type for setTimeout
+type TimeoutRef = ReturnType<typeof setTimeout>;
 
 type Tab = 'my-notes' | 'summary';
 
@@ -78,56 +86,36 @@ export default function RecordingView({
 }: RecordingViewProps) {
   const { recordingPath } = useParams<{ recordingPath: string }>();
   const { effectiveTheme } = useTheme();
-  const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('my-notes');
-  const titleInputRef = useRef<HTMLInputElement>(null);
-  const [localRecording, setLocalRecording] = useState<Recording | null>(null);
+  const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const [localNotes, setLocalNotes] = useState('');
-  const { state } = useLocation();
-  const shouldAutoPlay = state?.shouldAutoPlay ?? false;
+  const notesTimeoutRef = useRef<TimeoutRef>();
+  const titleTimeoutRef = useRef<TimeoutRef>();
+  const [isTitleEditing, setIsTitleEditing] = useState(false);
 
   const decodedPath = recordingPath ? decodeURIComponent(recordingPath) : '';
-  const recording = recordings.find((r) => r.path === decodedPath);
-
-  const activeRecording = useMemo(() => {
-    return (
-      localRecording ||
-      recording ||
-      (isRecording
-        ? {
-            path: decodedPath || 'in-progress',
-            name: 'New Recording',
-            date: new Date().toISOString(),
-            duration: 0,
-            isActive: true,
-          }
-        : null)
-    );
-  }, [localRecording, recording, isRecording, decodedPath]);
-
-  const currentRecording = useMemo(
-    () =>
-      activeRecording || {
-        path: 'in-progress',
-        name: 'New Recording',
-        date: new Date().toISOString(),
-        duration: 0,
-        isActive: true,
-      },
-    [activeRecording],
+  const recording = useMemo(
+    () => recordings.find((r) => r.path === decodedPath),
+    [recordings, decodedPath],
   );
 
-  useEffect(() => {
-    if (isEditing && titleInputRef.current) {
-      titleInputRef.current.focus();
-    }
-  }, [isEditing]);
+  /* eslint-disable-next-line consistent-return */
+  const currentRecording = useMemo(() => {
+    if (recording) return recording;
+    if (!isRecording) return null;
 
-  useEffect(() => {
-    setLocalRecording(null);
-  }, [recording]);
+    return {
+      path: decodedPath || 'in-progress',
+      name: 'New Recording',
+      date: new Date().toISOString(),
+      duration: 0,
+      isActive: true,
+      title: null,
+    };
+  }, [recording, isRecording, decodedPath]);
 
+  // Initialize local notes from props
   useEffect(() => {
     if (currentRecording && manualNotes[currentRecording.path]) {
       setLocalNotes(manualNotes[currentRecording.path]);
@@ -136,75 +124,127 @@ export default function RecordingView({
     }
   }, [currentRecording, manualNotes]);
 
-  useEffect(() => {
-    if (!isRecording && currentRecording && onSaveManualNotes && localNotes) {
+  // Debounced notes saving
+  useEffect((): (() => void) | void => {
+    if (!currentRecording || !onSaveManualNotes) return undefined;
+
+    if (notesTimeoutRef.current) {
+      clearTimeout(notesTimeoutRef.current);
+    }
+
+    notesTimeoutRef.current = setTimeout(() => {
       onSaveManualNotes(currentRecording, localNotes);
-    }
-  }, [isRecording, currentRecording, onSaveManualNotes, localNotes]);
+    }, 1000); // Debounce for 1 second
 
-  useEffect(() => {
-    if (shouldAutoPlay && currentRecording && !isRecording) {
-      const timer = setTimeout(() => {
-        const audioPlayer = document.querySelector('audio');
-        if (audioPlayer) {
-          audioPlayer.play().catch(() => {
-            // Error handling removed
-          });
-        }
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [shouldAutoPlay, currentRecording, isRecording]);
-
-  const date = currentRecording.date
-    ? new Date(currentRecording.date)
-    : new Date();
-  const formattedDate = date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-
-  const formattedTime = date
-    .toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    })
-    .toLowerCase();
-
-  const handleStartEditing = () => {
-    setEditedTitle(currentRecording.title || getDefaultTitle(date));
-    setIsEditing(true);
-  };
-
-  const handleSaveTitle = () => {
-    if (editedTitle.trim()) {
-      const updatedRecording = {
-        ...currentRecording,
-        title: editedTitle.trim(),
-      };
-      if (localRecording) {
-        setLocalRecording({
-          ...localRecording,
-          title: editedTitle.trim(),
-        });
+    function cleanup(): void {
+      if (notesTimeoutRef.current) {
+        clearTimeout(notesTimeoutRef.current);
       }
-      onUpdateTitle(updatedRecording, editedTitle.trim());
-      setIsEditing(false);
     }
-  };
+    return cleanup;
+  }, [localNotes, currentRecording, onSaveManualNotes]);
 
-  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setLocalNotes(e.target.value);
-  };
-
-  const handleSaveNotes = async () => {
-    if (onSaveManualNotes) {
-      await onSaveManualNotes(currentRecording, localNotes);
+  // Initialize title from recording
+  useEffect(() => {
+    if (currentRecording) {
+      setEditedTitle(
+        currentRecording.title ||
+          getDefaultTitle(new Date(currentRecording.date)),
+      );
     }
-  };
+  }, [currentRecording]);
+
+  // Debounced title saving
+  useEffect((): (() => void) | void => {
+    if (!currentRecording) return undefined;
+
+    if (titleTimeoutRef.current) {
+      clearTimeout(titleTimeoutRef.current);
+    }
+
+    titleTimeoutRef.current = setTimeout(() => {
+      const trimmedTitle = editedTitle.trim();
+      if (trimmedTitle && trimmedTitle !== currentRecording.title) {
+        onUpdateTitle(currentRecording, trimmedTitle);
+      }
+    }, 1000); // Debounce for 1 second
+
+    function cleanup(): void {
+      if (titleTimeoutRef.current) {
+        clearTimeout(titleTimeoutRef.current);
+      }
+    }
+    return cleanup;
+  }, [editedTitle, currentRecording, onUpdateTitle]);
+
+  // Add auto-resize handler for textarea
+  const handleTitleChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setEditedTitle(e.target.value);
+      // Auto-resize the textarea
+      e.target.style.height = 'auto';
+      e.target.style.height = `${e.target.scrollHeight}px`;
+    },
+    [],
+  );
+
+  const handleNotesChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setLocalNotes(e.target.value);
+    },
+    [],
+  );
+
+  // Format date and time
+  const { formattedDate, formattedTime } = useMemo(() => {
+    if (!currentRecording) {
+      return { formattedDate: '', formattedTime: '' };
+    }
+
+    const date = new Date(currentRecording.date);
+    return {
+      formattedDate: date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }),
+      formattedTime: date
+        .toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        })
+        .toLowerCase(),
+    };
+  }, [currentRecording]);
+
+  // Add this new handler
+  const handleTitleClick = useCallback(() => {
+    setIsTitleEditing(true);
+    // Wait for state update and focus the input
+    setTimeout(() => {
+      if (titleInputRef.current) {
+        titleInputRef.current.focus();
+      }
+    }, 0);
+  }, []);
+
+  // Add blur handler
+  const handleTitleBlur = useCallback(() => {
+    setIsTitleEditing(false);
+  }, []);
+
+  if (!currentRecording) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p
+          className={`text-sm ${effectiveTheme === 'dark' ? 'text-neutral-400' : 'text-neutral-600'}`}
+        >
+          No recording found
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center h-[calc(100vh-36px)]">
@@ -218,13 +258,11 @@ export default function RecordingView({
           />
         ) : (
           currentRecording && (
-            <AudioPlayer
-              src={currentRecording.path}
-              onPlaybackComplete={() => {
-                // Handle playback complete if needed
-              }}
-              autoPlay={shouldAutoPlay}
-            />
+            <div className="flex items-center justify-center p-4">
+              <p className="text-sm text-neutral-500">
+                Audio player coming soon...
+              </p>
+            </div>
           )
         )}
       </div>
@@ -233,7 +271,7 @@ export default function RecordingView({
         <div className="px-4">
           <div className="mb-8">
             <p
-              className={`text-xs mb-1 ${
+              className={`text-xs mb-3 pl-3 ${
                 effectiveTheme === 'dark'
                   ? 'text-app-dark-text-secondary'
                   : 'text-app-light-text-secondary'
@@ -241,46 +279,44 @@ export default function RecordingView({
             >
               {`${formattedDate} • ${formattedTime}`}
             </p>
-            <div className="flex items-center gap-2">
-              {isEditing ? (
-                <div className="flex items-center gap-2 flex-1">
-                  <input
-                    ref={titleInputRef}
-                    type="text"
-                    value={editedTitle}
-                    onChange={(e) => setEditedTitle(e.target.value)}
-                    onBlur={handleSaveTitle}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleSaveTitle();
-                      } else if (e.key === 'Escape') {
-                        setIsEditing(false);
-                      }
-                    }}
-                    className={`text-2xl font-semibold px-2 py-1 rounded-md border flex-1 max-w-full ${
-                      effectiveTheme === 'dark'
-                        ? 'bg-app-dark-surface border-app-dark-border text-app-dark-text-primary'
-                        : 'bg-app-light-surface border-app-light-border text-app-light-text-primary'
-                    }`}
-                  />
-                </div>
+            <div className="flex-1">
+              {isTitleEditing ? (
+                <textarea
+                  ref={titleInputRef}
+                  value={editedTitle}
+                  onChange={handleTitleChange}
+                  onBlur={handleTitleBlur}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      titleInputRef.current?.blur();
+                    }
+                  }}
+                  placeholder="Enter title..."
+                  className={`w-full p-3 text-2xl font-semibold rounded-md border resize-none overflow-hidden ${
+                    effectiveTheme === 'dark'
+                      ? 'bg-app-dark-surface border-app-dark-border text-app-dark-text-primary'
+                      : 'bg-app-light-surface border-app-light-border text-app-light-text-primary'
+                  }`}
+                  style={{ minHeight: '2.5rem' }}
+                />
               ) : (
-                <div className="group flex items-center gap-2">
-                  <h1 className="text-2xl font-semibold">
-                    {currentRecording.title || getDefaultTitle(date)}
-                  </h1>
-                  <button
-                    type="button"
-                    onClick={handleStartEditing}
-                    title="Edit title"
-                    className={`p-1 opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity ${
-                      effectiveTheme === 'dark'
-                        ? 'text-app-dark-text-primary'
-                        : 'text-app-light-text-primary'
-                    }`}
-                  >
-                    <Edit2 size={16} />
-                  </button>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={handleTitleClick}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      handleTitleClick();
+                    }
+                  }}
+                  className={`w-full p-3 text-2xl font-semibold rounded-md cursor-text ${
+                    effectiveTheme === 'dark'
+                      ? 'text-app-dark-text-primary hover:bg-app-dark-surface/40'
+                      : 'text-app-light-text-primary hover:bg-app-light-surface'
+                  }`}
+                >
+                  {editedTitle || 'Enter title...'}
                 </div>
               )}
             </div>
@@ -328,7 +364,6 @@ export default function RecordingView({
                         <textarea
                           value={localNotes}
                           onChange={handleNotesChange}
-                          onBlur={handleSaveNotes}
                           placeholder="Type your notes here..."
                           className={`w-full h-[400px] p-3 text-sm rounded-md border resize-y ${
                             effectiveTheme === 'dark'

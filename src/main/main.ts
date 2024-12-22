@@ -435,7 +435,53 @@ async function createRecordingFolder(timestamp: number): Promise<string> {
   return folderPath;
 }
 
-// Modify the start-recording handler to include timestamp in file name
+// First, update the metadata type definition and move it before usage
+type RecordingMetadata = {
+  title?: string;
+  duration: number;
+  transcriptionId?: string;
+  lastModified: string;
+  startTime?: string;
+  endTime?: string;
+  isActive?: boolean;
+};
+
+// Move updateRecordingMetadata function before start-recording handler
+async function updateRecordingMetadata(
+  folderPath: string,
+  updates: Partial<RecordingMetadata>,
+) {
+  try {
+    const metadataPath = path.join(folderPath, 'metadata.json');
+    let metadata = {};
+
+    // Try to read existing metadata
+    try {
+      const existingMetadata = fs.readFileSync(metadataPath, 'utf8');
+      metadata = JSON.parse(existingMetadata);
+    } catch (error) {
+      // If file doesn't exist or is invalid, start with empty metadata
+    }
+
+    // Update metadata with new values
+    metadata = {
+      ...metadata,
+      ...updates,
+      lastModified: new Date().toISOString(),
+    };
+
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating metadata:', error);
+    return {
+      error:
+        error instanceof Error ? error.message : 'Failed to update metadata',
+    };
+  }
+}
+
+// Update the start-recording handler
 ipcMain.handle('start-recording', async () => {
   try {
     if (!audioRecorder) {
@@ -445,6 +491,14 @@ ipcMain.handle('start-recording', async () => {
     const timestamp = Date.now();
     const folderPath = await createRecordingFolder(timestamp);
     const outputPath = path.join(folderPath, `recording-${timestamp}.mp3`);
+
+    // Create initial metadata file
+    await updateRecordingMetadata(folderPath, {
+      startTime: new Date().toISOString(),
+      lastModified: new Date().toISOString(),
+      duration: 0,
+      isActive: true,
+    });
 
     // Start tracking metadata
     RecordingMetadataStore.startRecording(outputPath);
@@ -523,47 +577,7 @@ async function getRecordingDuration(filePath: string): Promise<number> {
   }
 }
 
-// Add this helper function for metadata operations
-async function updateRecordingMetadata(
-  folderPath: string,
-  updates: Partial<{
-    title: string;
-    duration: number;
-    transcriptionId?: string;
-    lastModified: string;
-  }>,
-) {
-  try {
-    const metadataPath = path.join(folderPath, 'metadata.json');
-    let metadata = {};
-
-    // Try to read existing metadata
-    try {
-      const existingMetadata = fs.readFileSync(metadataPath, 'utf8');
-      metadata = JSON.parse(existingMetadata);
-    } catch (error) {
-      // If file doesn't exist or is invalid, start with empty metadata
-    }
-
-    // Update metadata with new values
-    metadata = {
-      ...metadata,
-      ...updates,
-      lastModified: new Date().toISOString(),
-    };
-
-    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
-    return { success: true };
-  } catch (error) {
-    console.error('Error updating metadata:', error);
-    return {
-      error:
-        error instanceof Error ? error.message : 'Failed to update metadata',
-    };
-  }
-}
-
-// Update the stop-recording handler to use the new metadata structure
+// Update the stop-recording handler
 ipcMain.handle('stop-recording', async () => {
   try {
     if (!audioRecorder) {
@@ -594,8 +608,12 @@ ipcMain.handle('stop-recording', async () => {
       }
     }
 
-    // Save duration metadata
-    await updateRecordingMetadata(folderPath, { duration });
+    // Update metadata when stopping
+    await updateRecordingMetadata(folderPath, {
+      duration,
+      isActive: false,
+      endTime: new Date().toISOString(),
+    });
 
     if (durationInterval) {
       clearInterval(durationInterval);
@@ -751,7 +769,7 @@ async function migrateExistingRecordings() {
   }
 }
 
-// Add migration to app startup
+// Register protocol handler before app is ready
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'file',
@@ -759,24 +777,35 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+// Register file protocol handler
+const registerFileProtocol = () => {
+  protocol.registerFileProtocol('file', (request, callback) => {
+    try {
+      let filePath = decodeURIComponent(request.url.replace('file://', ''));
+      // Handle Windows paths
+      if (process.platform === 'win32') {
+        // Remove leading slash
+        filePath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+        // Convert forward slashes to backslashes
+        filePath = filePath.replace(/\//g, '\\');
+      } else if (process.platform === 'darwin' && filePath.startsWith('/')) {
+        // On macOS, remove the extra leading slash
+        filePath = filePath.slice(1);
+      }
+
+      callback({ path: filePath });
+    } catch (error) {
+      console.error('Protocol error:', error);
+      callback({ error: -6 }); // net::ERR_FILE_NOT_FOUND
+    }
+  });
+};
+
+// Handle app initialization
 app
   .whenReady()
   .then(async () => {
-    // Register protocol handler
-    protocol.registerFileProtocol('file', (request) => {
-      try {
-        let filePath = decodeURIComponent(request.url.replace('file://', ''));
-        // On macOS, remove the extra leading slash
-        if (process.platform === 'darwin' && filePath.startsWith('/')) {
-          filePath = filePath.slice(1);
-        }
-        return { path: filePath };
-      } catch (error) {
-        console.error('Protocol error:', error);
-        return { error: -6 }; // net::ERR_FILE_NOT_FOUND
-      }
-    });
-
+    registerFileProtocol();
     await migrateExistingRecordings();
     cleanupOldRecordings();
     setInterval(cleanupOldRecordings, 24 * 60 * 60 * 1000);

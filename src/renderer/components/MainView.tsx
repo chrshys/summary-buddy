@@ -227,7 +227,7 @@ export default function MainView() {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
-  const handleGenerateNotes = async (recording: Recording) => {
+  const handleGenerateNotes = useCallback(async (recording: Recording) => {
     try {
       setIsGeneratingNotes((prev) => ({
         ...prev,
@@ -254,29 +254,45 @@ export default function MainView() {
         [recording.path]: false,
       }));
     }
-  };
+  }, []);
 
   const handleUpdateTitle = useCallback(
     async (recording: Recording, newTitle: string) => {
       try {
-        // Update the recording title in the recordings array first
-        const updatedRecordings = recordings.map((r) =>
-          r.path === recording.path ? { ...r, title: newTitle } : r,
+        // Optimistically update the UI first
+        setRecordings((prevRecordings) =>
+          prevRecordings.map((r) =>
+            r.path === recording.path ? { ...r, title: newTitle } : r,
+          ),
         );
-        setRecordings(updatedRecordings);
 
-        // Then save to the metadata file
-        await window.electron.audioRecorder.updateRecordingTitle(
-          recording.path,
-          newTitle,
-        );
+        // Then save to the metadata file in the background
+        await window.electron.audioRecorder
+          .updateRecordingTitle(recording.path, newTitle)
+          .catch((err) => {
+            console.error('Failed to save title:', err);
+            // Revert on error
+            setRecordings((prevRecordings) =>
+              prevRecordings.map((r) =>
+                r.path === recording.path
+                  ? { ...r, title: recording.title }
+                  : r,
+              ),
+            );
+            setError('Failed to update recording title');
+          });
       } catch (err) {
+        console.error('Error updating title:', err);
         // Revert the title change in case of error
-        setRecordings(recordings);
+        setRecordings((prevRecordings) =>
+          prevRecordings.map((r) =>
+            r.path === recording.path ? { ...r, title: recording.title } : r,
+          ),
+        );
         setError('Failed to update recording title');
       }
     },
-    [recordings],
+    [],
   );
 
   const renderTitleBar = () => {
@@ -326,14 +342,14 @@ export default function MainView() {
       },
     );
 
-    return () => {
-      recordingErrorUnsubscribe();
-    };
-  }, []);
-
-  // Add useEffect to listen for generated notes
-  useEffect(() => {
-    window.electron.onNotesGenerated(({ path, notes }) => {
+    // Subscribe to notes generated events
+    const notesGeneratedHandler = ({
+      path,
+      notes,
+    }: {
+      path: string;
+      notes: string;
+    }) => {
       setMeetingNotes((prev) => ({
         ...prev,
         [path]: notes,
@@ -342,29 +358,46 @@ export default function MainView() {
         ...prev,
         [path]: false,
       }));
-    });
+    };
+
+    window.electron.onNotesGenerated(notesGeneratedHandler);
+
+    return () => {
+      recordingErrorUnsubscribe();
+      // No need to unsubscribe from notesGenerated as it's handled internally
+    };
   }, []);
 
-  const handleSaveManualNotes = async (recording: Recording, notes: string) => {
-    try {
-      const result = await window.electron.audioRecorder.saveManualNotes(
-        recording.path,
-        notes,
-      );
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-      setManualNotes((prev) => ({
-        ...prev,
-        [recording.path]: notes,
-      }));
-    } catch (err) {
-      setError('Failed to save manual notes');
-    }
-  };
+  const handleSaveManualNotes = useCallback(
+    async (recording: Recording, notes: string) => {
+      try {
+        // Optimistically update the UI
+        setManualNotes((prev) => ({
+          ...prev,
+          [recording.path]: notes,
+        }));
 
-  // Load manual notes when a recording is selected
+        // Save in the background
+        await window.electron.audioRecorder
+          .saveManualNotes(recording.path, notes)
+          .catch((err) => {
+            console.error('Failed to save notes:', err);
+            // Revert on error
+            setManualNotes((prev) => ({
+              ...prev,
+              [recording.path]: recording.manualNotes || '',
+            }));
+            setError('Failed to save notes');
+          });
+      } catch (err) {
+        console.error('Error saving notes:', err);
+        setError('Failed to save notes');
+      }
+    },
+    [],
+  );
+
+  // Load manual notes when recordings change
   useEffect(() => {
     const loadManualNotes = async (recording: Recording) => {
       try {

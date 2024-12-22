@@ -88,9 +88,9 @@ export default function RecordButton({
         aria-label={getAriaLabel()}
         style={{
           transform: isRecording
-            ? `scale(${1 + audioLevel * 0.15})`
+            ? `scale(${1 + audioLevel * 0.25})`
             : 'scale(1)',
-          transition: 'transform 0.05s ease-out',
+          transition: 'transform 0.03s ease-out',
         }}
       >
         {isPlayButton && !isRecording ? (
@@ -103,41 +103,41 @@ export default function RecordButton({
             <div
               className="absolute inset-0 rounded-full bg-red-500/50 blur-[12px]"
               style={{
-                opacity: 0.3 + audioLevel * 0.7,
-                transform: `scale(${1.2 + audioLevel * 0.3})`,
-                transition: 'all 0.05s ease-out',
+                opacity: 0.2 + audioLevel * 0.8,
+                transform: `scale(${1.2 + audioLevel * 0.4})`,
+                transition: 'all 0.03s ease-out',
               }}
             />
             <div
               className="absolute inset-0 rounded-full bg-red-500/80"
               style={{
-                transform: `scale(${1 + audioLevel * 0.5})`,
-                opacity: Math.max(0, 0.8 - audioLevel * 0.5),
-                transition: 'all 0.05s ease-out',
+                transform: `scale(${1 + audioLevel * 0.6})`,
+                opacity: Math.max(0, 0.8 - audioLevel * 0.6),
+                transition: 'all 0.03s ease-out',
               }}
             />
             <div
               className="absolute inset-0 rounded-full bg-red-500/60"
               style={{
-                transform: `scale(${1 + audioLevel * 0.8})`,
-                opacity: Math.max(0, 0.6 - audioLevel * 0.4),
-                transition: 'all 0.075s ease-out',
+                transform: `scale(${1 + audioLevel * 0.9})`,
+                opacity: Math.max(0, 0.6 - audioLevel * 0.5),
+                transition: 'all 0.04s ease-out',
               }}
             />
             <div
               className="absolute inset-0 rounded-full bg-red-500/40"
               style={{
-                transform: `scale(${1 + audioLevel})`,
+                transform: `scale(${1 + audioLevel * 1.2})`,
                 opacity: Math.max(0, 0.4 - audioLevel * 0.3),
-                transition: 'all 0.1s ease-out',
+                transition: 'all 0.05s ease-out',
               }}
             />
-            {audioLevel > 0.2 && (
+            {audioLevel > 0.1 && (
               <div
                 className="absolute inset-0 rounded-full bg-red-500/30 animate-ping"
                 style={{
-                  animationDuration: `${1 - audioLevel * 0.5}s`,
-                  opacity: Math.min(1, audioLevel * 2),
+                  animationDuration: `${0.8 - audioLevel * 0.6}s`,
+                  opacity: Math.min(1, audioLevel * 2.5),
                 }}
               />
             )}
