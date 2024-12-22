@@ -20,8 +20,6 @@ const BASE_AMPLITUDE = 10;
 const WAVE_FREQUENCY = 6;
 const CONTAINER_HEIGHT = 40;
 const WAVE_PADDING = 4;
-const MIN_BORDER_OPACITY = 0.5;
-const MAX_BORDER_OPACITY = 1;
 const BASE_SPEED = 10; // Base animation speed
 const MAX_SPEED = 20; // Maximum animation speed when audio is loud
 
@@ -50,15 +48,21 @@ export default function RecordingVisualizer({
 }: RecordingVisualizerProps) {
   const { effectiveTheme } = useTheme();
 
+  // Get the appropriate stroke color based on theme
+  const getStrokeColor = (opacity: number) => {
+    if (effectiveTheme === 'dark') {
+      // Dark theme: lighter grays
+      return `rgba(255, 255, 255, ${opacity})`;
+    }
+    // Light theme: darker grays
+    return `rgba(0, 0, 0, ${opacity})`;
+  };
+
   const wavePaths = useMemo(() => {
     const boostedAudio = Math.min(1, audioLevel * 2);
-    console.log('Audio Level:', audioLevel, 'Boosted:', boostedAudio);
     const amplitude = BASE_AMPLITUDE * (0.15 + boostedAudio * 0.85);
     const now = performance.now() / 1000;
-
-    // Calculate animation speed based on audio level
     const speed = BASE_SPEED + (MAX_SPEED - BASE_SPEED) * boostedAudio;
-
     return [
       {
         path: generateWavePath(
@@ -66,9 +70,9 @@ export default function RecordingVisualizer({
           CONTAINER_HEIGHT - WAVE_PADDING * 2,
           amplitude,
           WAVE_FREQUENCY,
-          now * speed, // Dynamic speed
+          now * speed,
         ),
-        opacity: 0.7,
+        opacity: 0.5,
         id: 'primary-wave',
       },
       {
@@ -77,9 +81,9 @@ export default function RecordingVisualizer({
           CONTAINER_HEIGHT - WAVE_PADDING * 2,
           amplitude * 0.8,
           WAVE_FREQUENCY * 1.5,
-          now * speed * 1.2, // Slightly faster
+          now * speed * 1.2,
         ),
-        opacity: 0.5,
+        opacity: 0.3,
         id: 'secondary-wave',
       },
       {
@@ -88,20 +92,12 @@ export default function RecordingVisualizer({
           CONTAINER_HEIGHT - WAVE_PADDING * 2,
           amplitude * 0.6,
           WAVE_FREQUENCY * 0.8,
-          now * speed * 0.8, // Slightly slower
+          now * speed * 0.8,
         ),
-        opacity: 0.3,
+        opacity: 0.15,
         id: 'tertiary-wave',
       },
     ];
-  }, [audioLevel]);
-
-  const borderOpacity = useMemo(() => {
-    const boostedAudio = Math.min(1, audioLevel * 2);
-    return (
-      MIN_BORDER_OPACITY +
-      (MAX_BORDER_OPACITY - MIN_BORDER_OPACITY) * boostedAudio
-    );
   }, [audioLevel]);
 
   return (
@@ -113,14 +109,11 @@ export default function RecordingVisualizer({
       }`}
     >
       <div
-        className={`p-3 rounded-lg border transition-colors duration-[50ms] ${
+        className={`p-3 rounded-lg border-2 transition-colors duration-[50ms] ${
           effectiveTheme === 'dark'
-            ? 'bg-app-dark-surface/40'
-            : 'bg-app-light-surface'
+            ? 'bg-red-950/20 border-red-900/30'
+            : 'bg-red-50/50 border-red-200'
         }`}
-        style={{
-          borderColor: `rgb(239 68 68 / ${borderOpacity})`,
-        }}
       >
         <div className="flex items-center gap-4">
           <button
@@ -149,9 +142,8 @@ export default function RecordingVisualizer({
                       key={wave.id}
                       d={wave.path}
                       fill="none"
-                      stroke="rgb(239, 68, 68)"
+                      stroke={getStrokeColor(wave.opacity)}
                       strokeWidth="2"
-                      opacity={wave.opacity}
                     />
                   ))}
                 </svg>
