@@ -135,7 +135,7 @@ export default function RecordingCard({
           {formattedDateTime}
         </span>
         <span
-          className={`text-xl font-medium mb-2 ${getDateClasses(effectiveTheme)}`}
+          className={`text-xl font-medium mt-2 mb-4 ${getDateClasses(effectiveTheme)}`}
         >
           {recording.title || defaultTitle}
         </span>

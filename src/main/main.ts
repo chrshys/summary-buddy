@@ -1049,15 +1049,16 @@ ipcMain.handle('transcribe-recording', async (_, filePath: string) => {
       `transcript-${timestamp}.txt`,
     );
 
-    // Transcribe the audio with speaker diarization
-    const result = await diarizationService.transcribeAudio(filePath);
+    // First transcribe the audio
+    const transcriptionResult =
+      await diarizationService.transcribeAudio(filePath);
 
-    if (result.error) {
-      return { error: result.error };
+    if (transcriptionResult.error) {
+      return { error: transcriptionResult.error };
     }
 
     // Format and save the transcription
-    const formattedTranscript = result.segments
+    const formattedTranscript = transcriptionResult.segments
       .map((segment) => `[${segment.speaker}]: ${segment.text}`)
       .join('\n');
 
@@ -1066,7 +1067,7 @@ ipcMain.handle('transcribe-recording', async (_, filePath: string) => {
     return {
       success: true,
       text: formattedTranscript,
-      segments: result.segments,
+      segments: transcriptionResult.segments,
     };
   } catch (error) {
     console.error('Error during transcription:', error);
@@ -1112,6 +1113,19 @@ ipcMain.handle('create-summary', async (_, filePath: string) => {
 
     const folderPath = path.dirname(filePath);
     const notesPath = path.join(folderPath, `notes-${timestamp}.txt`);
+    const transcriptPath = path.join(folderPath, `transcript-${timestamp}.txt`);
+
+    // First transcribe the audio
+    const transcriptionResult =
+      await diarizationService.transcribeAudio(filePath);
+    if (transcriptionResult.error) {
+      return { error: transcriptionResult.error };
+    }
+
+    // Save transcript if available
+    if (transcriptionResult.transcript) {
+      fs.writeFileSync(transcriptPath, transcriptionResult.transcript);
+    }
 
     // Generate notes
     const result = await diarizationService.createSummary(filePath);
@@ -1299,5 +1313,14 @@ ipcMain.handle('get-audio-duration', async (_, filePath: string) => {
   } catch (error) {
     console.error('Error getting audio duration:', error);
     return { error: 'Failed to get audio duration' };
+  }
+});
+
+// Update the open-transcript handler
+ipcMain.on('open-transcript', async (_, { path: transcriptPath }) => {
+  try {
+    shell.openPath(transcriptPath);
+  } catch (error) {
+    console.error('Failed to open transcript:', error);
   }
 });

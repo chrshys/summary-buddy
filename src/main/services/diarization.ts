@@ -11,6 +11,7 @@ export interface DiarizedSegment {
 
 export interface TranscriptionResult {
   segments: DiarizedSegment[];
+  transcript?: string;
   error?: string;
 }
 
@@ -74,7 +75,15 @@ class DiarizationService {
               confidence: utterance.confidence || 0,
             })) || [];
 
-          return { segments };
+          // Create verbatim transcript
+          const verbatimTranscript = segments
+            .map((segment) => `[${segment.speaker}]: ${segment.text}`)
+            .join('\n\n');
+
+          return {
+            segments,
+            transcript: verbatimTranscript,
+          };
         }
 
         if (attempts >= maxAttempts) {

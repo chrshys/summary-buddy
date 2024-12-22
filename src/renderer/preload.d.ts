@@ -67,4 +67,9 @@ declare global {
   }
 }
 
+interface IElectronAPI {
+  // ... existing declarations
+  sendMessage(channel: 'open-transcript', data: { content: string; title: string }): void;
+}
+
 export {};

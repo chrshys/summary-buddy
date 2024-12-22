@@ -6,14 +6,16 @@ import React, {
   useCallback,
 } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
-import { Loader, Wand2 } from 'lucide-react';
+import { Loader, Wand2, Copy, Check, FileText } from 'lucide-react';
 import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import * as Tooltip from '@radix-ui/react-tooltip';
 import type { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
 import { getDefaultTitle } from '../utils/dateFormatting';
 import AudioPlayer from './AudioPlayer';
 import RecordingVisualizer from './RecordingVisualizer';
+import type { Channels } from '../types/electron';
 
 // Add NodeJS type for setTimeout
 type TimeoutRef = ReturnType<typeof setTimeout>;
@@ -96,6 +98,7 @@ export default function RecordingView({
   const titleTimeoutRef = useRef<TimeoutRef>();
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [showFinishedPrompt, setShowFinishedPrompt] = useState(false);
+  const [showCopyTooltip, setShowCopyTooltip] = useState(false);
 
   // Get autoPlay from location state
   const shouldAutoPlay =
@@ -248,6 +251,19 @@ export default function RecordingView({
     }
   }, [isRecording, showFinishedPrompt]);
 
+  // Fix the handleCopyToClipboard function spacing
+  const handleCopyToClipboard = useCallback(() => {
+    if (currentRecording && meetingNotes[currentRecording.path]) {
+      // Create temporary element to handle HTML to plain text conversion
+      const temp = document.createElement('div');
+      temp.innerHTML = meetingNotes[currentRecording.path];
+      navigator.clipboard.writeText(temp.textContent || temp.innerText);
+      // Show success tooltip
+      setShowCopyTooltip(true);
+      setTimeout(() => setShowCopyTooltip(false), 2000);
+    }
+  }, [currentRecording, meetingNotes]);
+
   const renderSummaryContent = () => {
     if (!currentRecording) return null;
     if (isRecording) {
@@ -358,8 +374,8 @@ export default function RecordingView({
             <p
               className={`text-xs mb-2 pl-3 ${
                 effectiveTheme === 'dark'
-                  ? 'text-app-dark-text-secondary'
-                  : 'text-app-light-text-secondary'
+                  ? 'text-app-dark-text-secondary/50'
+                  : 'text-app-light-text-secondary/50'
               }`}
             >
               {`${formattedDate} • ${formattedTime}`}
@@ -508,11 +524,133 @@ export default function RecordingView({
                   if (meetingNotes[currentRecording.path]) {
                     return (
                       <div className="min-h-[400px]">
+                        <div className="flex justify-end mb-4 gap-2">
+                          <Tooltip.Provider>
+                            <Tooltip.Root>
+                              <Tooltip.Trigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const folderPath = currentRecording.path
+                                      .split('/')
+                                      .slice(0, -1)
+                                      .join('/');
+                                    const folderName =
+                                      folderPath.split('/').pop() || '';
+                                    const timestamp =
+                                      folderName.match(/recording-(\d+)$/)?.[1];
+                                    if (!timestamp) return;
+                                    const transcriptPath = `${folderPath}/transcript-${timestamp}.txt`;
+                                    window.electron.ipcRenderer.sendMessage(
+                                      'open-transcript' as Channels,
+                                      {
+                                        path: transcriptPath,
+                                      },
+                                    );
+                                  }}
+                                  className={`inline-flex items-center gap-2 p-2 rounded-md transition-colors ${
+                                    effectiveTheme === 'dark'
+                                      ? 'hover:bg-app-dark-surface/40'
+                                      : 'hover:bg-app-light-surface/40'
+                                  }`}
+                                >
+                                  <FileText
+                                    size={20}
+                                    className={
+                                      effectiveTheme === 'dark'
+                                        ? 'text-app-dark-text-secondary'
+                                        : 'text-app-light-text-secondary'
+                                    }
+                                  />
+                                </button>
+                              </Tooltip.Trigger>
+                              <Tooltip.Portal>
+                                <Tooltip.Content
+                                  className={`px-3 py-1.5 text-xs rounded-md shadow-lg ${
+                                    effectiveTheme === 'dark'
+                                      ? 'bg-app-dark-surface text-app-dark-text-primary'
+                                      : 'bg-app-light-surface text-app-light-text-primary'
+                                  }`}
+                                  sideOffset={5}
+                                >
+                                  View Transcript
+                                  <Tooltip.Arrow
+                                    className={
+                                      effectiveTheme === 'dark'
+                                        ? 'fill-app-dark-surface'
+                                        : 'fill-app-light-surface'
+                                    }
+                                  />
+                                </Tooltip.Content>
+                              </Tooltip.Portal>
+                            </Tooltip.Root>
+
+                            <Tooltip.Root>
+                              <Tooltip.Trigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={handleCopyToClipboard}
+                                  className={`p-2 rounded-md transition-colors ${
+                                    effectiveTheme === 'dark'
+                                      ? 'hover:bg-app-dark-surface/40'
+                                      : 'hover:bg-app-light-surface/40'
+                                  }`}
+                                >
+                                  {showCopyTooltip ? (
+                                    <div className="relative">
+                                      <Check
+                                        size={20}
+                                        className="text-green-500"
+                                      />
+                                      <div
+                                        className={`absolute bottom-full right-0 mb-2 px-2 py-1 text-xs rounded shadow-lg whitespace-nowrap ${
+                                          effectiveTheme === 'dark'
+                                            ? 'bg-app-dark-surface text-app-dark-text-primary'
+                                            : 'bg-app-light-surface text-app-light-text-primary'
+                                        }`}
+                                      >
+                                        Copied to clipboard!
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <Copy
+                                      size={20}
+                                      className={
+                                        effectiveTheme === 'dark'
+                                          ? 'text-app-dark-text-secondary'
+                                          : 'text-app-light-text-secondary'
+                                      }
+                                    />
+                                  )}
+                                </button>
+                              </Tooltip.Trigger>
+                              <Tooltip.Portal>
+                                <Tooltip.Content
+                                  className={`px-3 py-1.5 text-xs rounded-md shadow-lg ${
+                                    effectiveTheme === 'dark'
+                                      ? 'bg-app-dark-surface text-app-dark-text-primary'
+                                      : 'bg-app-light-surface text-app-light-text-primary'
+                                  }`}
+                                  sideOffset={5}
+                                >
+                                  Copy Summary
+                                  <Tooltip.Arrow
+                                    className={
+                                      effectiveTheme === 'dark'
+                                        ? 'fill-app-dark-surface'
+                                        : 'fill-app-light-surface'
+                                    }
+                                  />
+                                </Tooltip.Content>
+                              </Tooltip.Portal>
+                            </Tooltip.Root>
+                          </Tooltip.Provider>
+                        </div>
                         <div
                           className={`prose prose-sm max-w-none leading-relaxed pb-8 ${
                             effectiveTheme === 'dark'
-                              ? 'text-app-dark-text-secondary/95 prose-headings:text-app-dark-text-primary prose-strong:text-app-dark-text-primary prose-li:text-app-dark-text-secondary/95 text-xs'
-                              : 'text-app-light-text-secondary/95 prose-headings:text-app-light-text-primary prose-strong:text-app-light-text-primary prose-li:text-app-light-text-secondary/95 text-xs'
+                              ? 'text-app-dark-text-secondary/95 prose-headings:text-app-dark-text-primary prose-strong:text-app-dark-text-primary prose-li:text-app-dark-text-secondary/95 text-sm'
+                              : 'text-app-light-text-secondary/95 prose-headings:text-app-light-text-primary prose-strong:text-app-light-text-primary prose-li:text-app-light-text-secondary/95 text-sm'
                           }`}
                         >
                           <ReactMarkdown

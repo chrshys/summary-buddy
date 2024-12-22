@@ -135,29 +135,63 @@ export default function MainView() {
   useEffect(() => {
     const recordingStartedUnsubscribe = window.electron.ipcRenderer.on(
       'recording-started',
-      (recording: Recording) => {
+      ((...args: unknown[]) => {
+        const recording = args[0] as Recording;
         setRecordings((prev) => {
           const newRecordings = [{ ...recording, isActive: true }, ...prev];
           navigate(`/recording/${encodeURIComponent(recording.path)}`);
           return newRecordings;
         });
-      },
+      }) as (...args: unknown[]) => void,
     );
 
     const recordingStoppedUnsubscribe = window.electron.ipcRenderer.on(
       'recording-stopped',
-      ({ path: recordingPath }) => {
+      ((...args: unknown[]) => {
+        const { path: recordingPath } = args[0] as { path: string };
         setRecordings((prev) =>
           prev.map((rec) =>
             rec.path === recordingPath ? { ...rec, isActive: false } : rec,
           ),
         );
-      },
+      }) as (...args: unknown[]) => void,
     );
+
+    const recordingErrorUnsubscribe = window.electron.ipcRenderer.on(
+      'recording-error',
+      ((...args: unknown[]) => {
+        const errorMessage = args[0] as string;
+        setError(errorMessage);
+        setIsRecording(false);
+        setElapsedTime(0);
+      }) as (...args: unknown[]) => void,
+    );
+
+    // Subscribe to notes generated events
+    const notesGeneratedHandler = ({
+      path,
+      notes,
+    }: {
+      path: string;
+      notes: string;
+    }) => {
+      setMeetingNotes((prev) => ({
+        ...prev,
+        [path]: notes,
+      }));
+      setIsGeneratingNotes((prev) => ({
+        ...prev,
+        [path]: false,
+      }));
+    };
+
+    window.electron.onNotesGenerated(notesGeneratedHandler);
 
     return () => {
       recordingStartedUnsubscribe();
       recordingStoppedUnsubscribe();
+      recordingErrorUnsubscribe();
+      // No need to unsubscribe from notesGenerated as it's handled internally
     };
   }, [navigate]);
 
@@ -340,11 +374,12 @@ export default function MainView() {
   useEffect(() => {
     const recordingErrorUnsubscribe = window.electron.ipcRenderer.on(
       'recording-error',
-      (errorMessage: string) => {
+      ((...args: unknown[]) => {
+        const errorMessage = args[0] as string;
         setError(errorMessage);
         setIsRecording(false);
         setElapsedTime(0);
-      },
+      }) as (...args: unknown[]) => void,
     );
 
     // Subscribe to notes generated events
@@ -369,7 +404,6 @@ export default function MainView() {
 
     return () => {
       recordingErrorUnsubscribe();
-      // No need to unsubscribe from notesGenerated as it's handled internally
     };
   }, []);
 
@@ -402,10 +436,11 @@ export default function MainView() {
 
   const handleDeleteRecording = useCallback(async (recording: Recording) => {
     try {
-      const result = await window.electron.audioRecorder.deleteRecording(
+      const result = (await window.electron.audioRecorder.deleteRecording(
         recording.path,
-      );
-      if (result.error) {
+      )) as unknown as { error?: string };
+
+      if (result?.error) {
         setError(result.error);
         return;
       }
@@ -432,17 +467,18 @@ export default function MainView() {
   useEffect(() => {
     const loadManualNotes = async (recording: Recording) => {
       try {
-        const result = await window.electron.audioRecorder.getManualNotes(
+        const result = (await window.electron.audioRecorder.getManualNotes(
           recording.path,
-        );
-        if (result.error) {
+        )) as { notes?: string; error?: string } | undefined;
+
+        if (result?.error) {
           setError(result.error);
           return;
         }
-        if (result.notes !== undefined) {
+        if (result?.notes !== undefined) {
           setManualNotes((prev) => ({
             ...prev,
-            [recording.path]: result.notes,
+            [recording.path]: result.notes as string,
           }));
         }
       } catch {

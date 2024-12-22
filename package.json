@@ -103,6 +103,7 @@
   "dependencies": {
     "@electron/notarize": "^2.3.2",
     "@heroicons/react": "^2.2.0",
+    "@radix-ui/react-tooltip": "^1.1.6",
     "@tailwindcss/forms": "^0.5.9",
     "assemblyai": "^4.8.0",
     "autoprefixer": "^10.4.20",
