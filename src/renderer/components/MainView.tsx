@@ -564,6 +564,7 @@ export default function MainView() {
                   elapsedTime={elapsedTime}
                   isGeneratingNotes={isGeneratingNotes}
                   onDeleteRecording={handleDeleteRecording}
+                  manualNotes={manualNotes}
                 />
               </div>
             </div>

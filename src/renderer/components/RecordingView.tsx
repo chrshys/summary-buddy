@@ -91,7 +91,10 @@ export default function RecordingView({
   const location = useLocation();
   const { effectiveTheme } = useTheme();
   const [editedTitle, setEditedTitle] = useState('');
-  const [activeTab, setActiveTab] = useState<Tab>('my-notes');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    // Initialize from location state if available
+    return (location.state as { activeTab?: Tab })?.activeTab || 'my-notes';
+  });
   const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const [localNotes, setLocalNotes] = useState('');
   const notesTimeoutRef = useRef<TimeoutRef>();
@@ -247,9 +250,11 @@ export default function RecordingView({
   useEffect(() => {
     if (!isRecording && showFinishedPrompt === false) {
       setShowFinishedPrompt(true);
-      setActiveTab('summary');
+      if (!(location.state as { activeTab?: Tab })?.activeTab) {
+        setActiveTab('summary');
+      }
     }
-  }, [isRecording, showFinishedPrompt]);
+  }, [isRecording, showFinishedPrompt, location.state]);
 
   // Fix the handleCopyToClipboard function spacing
   const handleCopyToClipboard = useCallback(() => {

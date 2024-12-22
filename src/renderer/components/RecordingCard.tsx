@@ -1,15 +1,17 @@
 import React from 'react';
-import { Play, Wand2, Loader, Trash2 } from 'lucide-react';
+import { Play, Wand2, Loader, Trash2, FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import type { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
 import { getDefaultTitle } from '../utils/dateFormatting';
+import type { Channels } from '../types/electron';
 
 interface RecordingCardProps {
   recording: Recording;
   hasAiSummary?: boolean;
   isGeneratingSummary?: boolean;
+  hasManualNotes?: boolean;
   onDelete: () => Promise<void>;
 }
 
@@ -56,16 +58,34 @@ const getPlayButtonClasses = (theme: 'light' | 'dark'): string => {
     : 'text-app-light-text-secondary hover:text-app-light-text-primary bg-neutral-100 hover:bg-neutral-200';
 };
 
+const getLabelClasses = (
+  theme: 'light' | 'dark',
+  isClickable: boolean,
+): string => {
+  const baseClasses =
+    theme === 'dark'
+      ? 'text-app-dark-text-tertiary border-app-dark-border/50'
+      : 'text-app-light-text-tertiary border-app-light-border';
+
+  return isClickable
+    ? `${baseClasses} cursor-pointer hover:bg-black/5 dark:hover:bg-white/5`
+    : baseClasses;
+};
+
 export default function RecordingCard({
   recording,
   hasAiSummary = false,
   isGeneratingSummary = false,
+  hasManualNotes = false,
   onDelete,
 }: RecordingCardProps) {
   const { effectiveTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const date = recording.date ? new Date(recording.date) : null;
   const [isDeleting, setIsDeleting] = React.useState(false);
+
+  const isRecordingView = location.pathname.startsWith('/recording/');
 
   const formattedDateTime = date
     ? `${date.toLocaleDateString('en-US', {
@@ -104,6 +124,33 @@ export default function RecordingCard({
     } catch (err) {
       setIsDeleting(false);
     }
+  };
+
+  const handleNotesClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    if (isRecordingView) {
+      // If we're in the recording view, open transcript in notes app
+      const folderPath = recording.path.split('/').slice(0, -1).join('/');
+      const folderName = folderPath.split('/').pop() || '';
+      const timestamp = folderName.match(/recording-(\d+)$/)?.[1];
+      if (!timestamp) return;
+      const transcriptPath = `${folderPath}/transcript-${timestamp}.txt`;
+      window.electron.ipcRenderer.sendMessage('open-transcript' as Channels, {
+        path: transcriptPath,
+      });
+    } else {
+      // If we're in the list view, navigate to notes tab
+      navigate(`/recording/${encodeURIComponent(recording.path)}`, {
+        state: { activeTab: 'my-notes' },
+      });
+    }
+  };
+
+  const handleAiClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    navigate(`/recording/${encodeURIComponent(recording.path)}`, {
+      state: { activeTab: 'summary' },
+    });
   };
 
   return (
@@ -155,27 +202,55 @@ export default function RecordingCard({
                 : 'Processing...'}
             </span>
           </button>
-          {(hasAiSummary || isGeneratingSummary) && (
-            <div
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-full border ${
-                effectiveTheme === 'dark'
-                  ? 'text-app-dark-text-tertiary border-app-dark-border/50'
-                  : 'text-app-light-text-tertiary border-app-light-border'
-              }`}
-            >
-              {isGeneratingSummary ? (
-                <>
-                  <Loader size={16} className="animate-spin" />
-                  <span className="text-xs">Generating Summary...</span>
-                </>
-              ) : (
-                <>
-                  <Wand2 size={16} />
-                  <span className="text-xs">AI Summary</span>
-                </>
-              )}
-            </div>
-          )}
+          <div className="flex gap-2">
+            {hasManualNotes && (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={handleNotesClick}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    handleNotesClick(e as unknown as React.MouseEvent);
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-full border transition-colors ${getLabelClasses(
+                  effectiveTheme,
+                  true,
+                )}`}
+              >
+                <FileText size={14} />
+                <span className="text-xs">Notes</span>
+              </div>
+            )}
+            {(hasAiSummary || isGeneratingSummary) && (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={handleAiClick}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    handleAiClick(e as unknown as React.MouseEvent);
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-full border transition-colors ${getLabelClasses(
+                  effectiveTheme,
+                  !isGeneratingSummary,
+                )}`}
+              >
+                {isGeneratingSummary ? (
+                  <>
+                    <Loader size={14} className="animate-spin" />
+                    <span className="text-xs">AI</span>
+                  </>
+                ) : (
+                  <>
+                    <Wand2 size={14} />
+                    <span className="text-xs">AI</span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </motion.div>

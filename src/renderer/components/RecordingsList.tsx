@@ -10,6 +10,7 @@ export interface RecordingsListProps {
   elapsedTime: number;
   isGeneratingNotes: Record<string, boolean>;
   onDeleteRecording: (recording: Recording) => Promise<void>;
+  manualNotes?: Record<string, string>;
 }
 
 export default function RecordingsList({
@@ -18,6 +19,7 @@ export default function RecordingsList({
   elapsedTime,
   isGeneratingNotes,
   onDeleteRecording,
+  manualNotes = {},
 }: RecordingsListProps) {
   // Get the active recording's path if it exists
   const activeRecording = recordings.find((r) => r.isActive);
@@ -41,6 +43,10 @@ export default function RecordingsList({
               recording={recording}
               hasAiSummary={Boolean(recording.aiNotes)}
               isGeneratingSummary={isGeneratingNotes[recording.path]}
+              hasManualNotes={Boolean(
+                recording.manualNotes?.trim() ||
+                  manualNotes[recording.path]?.trim(),
+              )}
               onDelete={() => onDeleteRecording(recording)}
             />
           ))}
