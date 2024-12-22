@@ -92,7 +92,8 @@ export default function RecordingView({
   const { effectiveTheme } = useTheme();
   const [editedTitle, setEditedTitle] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>(() => {
-    // Initialize from location state if available
+    // Initialize to 'my-notes' if recording is active, otherwise use location state or default to 'my-notes'
+    if (isRecording) return 'my-notes';
     return (location.state as { activeTab?: Tab })?.activeTab || 'my-notes';
   });
   const titleInputRef = useRef<HTMLTextAreaElement>(null);
