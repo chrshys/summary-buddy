@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useMemo,
+} from 'react';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -19,7 +25,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const savedTheme = localStorage.getItem('theme');
     return (savedTheme as Theme) || 'system';
   });
-  const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>('dark');
+  const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>(
+    'dark',
+  );
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -48,12 +56,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('theme', newTheme);
   };
 
+  const value = useMemo(
+    () => ({
+      theme,
+      effectiveTheme,
+      setTheme: handleThemeChange,
+    }),
+    [theme, effectiveTheme],
+  );
+
   return (
-    <ThemeContext.Provider
-      value={{ theme, effectiveTheme, setTheme: handleThemeChange }}
-    >
-      {children}
-    </ThemeContext.Provider>
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
   );
 }
 

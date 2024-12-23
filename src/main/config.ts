@@ -23,7 +23,6 @@ export function readConfig(): Config {
     const configData = fs.readFileSync(configPath, 'utf8');
     return JSON.parse(configData);
   } catch (error) {
-    console.error('Error reading config:', error);
     return {};
   }
 }
@@ -31,4 +30,4 @@ export function readConfig(): Config {
 export function writeConfig(config: Config): void {
   const configPath = getConfigPath();
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-} 
+}
