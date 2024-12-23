@@ -4,6 +4,7 @@ on: [push, pull_request]
 
 jobs:
   test:
+    timeout-minutes: 30  # Added timeout
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -14,21 +15,27 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v3
 
-      - name: Install Node.js and NPM
+      # Add system dependencies for macOS
+      - name: Install macOS system dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install pkg-config
+
+      - name: Install Node.js and Yarn
         uses: actions/setup-node@v3
         with:
-          node-version: 18
-          cache: npm
+          node-version: 20
+          cache: 'yarn'
 
-      - name: npm install
+      - name: Install dependencies
         run: |
-          npm install
+          yarn install --network-timeout 100000
 
-      - name: npm test
+      - name: Run tests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npm run package
-          npm run lint
-          npm exec tsc
-          npm test
+          yarn package
+          yarn lint
+          yarn tsc
+          yarn test
