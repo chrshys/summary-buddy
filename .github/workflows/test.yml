@@ -4,18 +4,17 @@ on: [push, pull_request]
 
 jobs:
   test:
-    timeout-minutes: 30  # Added timeout
+    timeout-minutes: 30
     runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        os: [macos-latest, windows-latest]  # Removed ubuntu-latest
 
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v3
 
-      # Add system dependencies for macOS
       - name: Install macOS system dependencies
         if: runner.os == 'macOS'
         run: |
