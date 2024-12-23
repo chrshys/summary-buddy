@@ -4,12 +4,11 @@ on: [push, pull_request]
 
 jobs:
   test:
-    timeout-minutes: 30
     runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
-        os: [macos-latest, windows-latest]  # Removed ubuntu-latest
+        os: [macos-latest, windows-latest]
 
     steps:
       - name: Check out Git repository
