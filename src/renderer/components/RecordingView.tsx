@@ -12,7 +12,7 @@ import remarkGfm from 'remark-gfm';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import type { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
-import { getDefaultTitle } from '../utils/dateFormatting';
+import getDefaultTitle from '../utils/dateFormatting';
 import AudioPlayer from './AudioPlayer';
 import RecordingVisualizer from './RecordingVisualizer';
 import type { Channels } from '../types/electron';

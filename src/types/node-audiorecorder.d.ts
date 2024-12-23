@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+
 declare module 'node-audiorecorder' {
   interface AudioRecorderOptions {
     program?: string;
@@ -17,7 +19,7 @@ declare module 'node-audiorecorder' {
 
     stop(): void;
 
-    stream(): NodeJS.ReadableStream;
+    stream(): Readable;
   }
 
   export default AudioRecorder;

@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { Recording } from '../types/recording';
 import { useTheme } from '../contexts/ThemeContext';
-import { getDefaultTitle } from '../utils/dateFormatting';
+import getDefaultTitle from '../utils/dateFormatting';
 import type { Channels } from '../types/electron';
 
 interface RecordingCardProps {
