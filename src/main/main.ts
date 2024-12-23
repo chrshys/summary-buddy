@@ -213,6 +213,11 @@ const installExtensions = async () => {
     .catch(console.log);
 };
 
+// Add dock hiding code before app initialization
+if (process.platform === 'darwin') {
+  app.dock.hide();
+}
+
 const createWindow = async () => {
   if (isDebug) {
     await installExtensions();
@@ -240,6 +245,7 @@ const createWindow = async () => {
     fullscreenable: false,
     resizable: false,
     transparent: true,
+    skipTaskbar: true, // Hide from taskbar
     webPreferences: {
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
