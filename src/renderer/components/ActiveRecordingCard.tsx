@@ -2,7 +2,7 @@ import React from 'react';
 import { Square } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { formatTime } from '../utils/time';
+import formatTime from '../utils/time';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface ActiveRecordingCardProps {

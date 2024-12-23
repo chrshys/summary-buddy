@@ -33,7 +33,6 @@ export class RecordingMetadataStore {
       );
       return metadata;
     } catch (error) {
-      console.error('Error reading recording metadata:', error);
       return null;
     }
   }
@@ -54,9 +53,7 @@ export class RecordingMetadataStore {
 
       // Try to read existing metadata
       if (existsSync(metadataPath)) {
-        metadata = JSON.parse(
-          await fsPromises.readFile(metadataPath, 'utf8'),
-        );
+        metadata = JSON.parse(await fsPromises.readFile(metadataPath, 'utf8'));
       }
 
       // Update metadata with new values
@@ -72,7 +69,6 @@ export class RecordingMetadataStore {
       );
       return true;
     } catch (error) {
-      console.error('Error updating recording metadata:', error);
       return false;
     }
   }
