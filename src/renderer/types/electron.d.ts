@@ -67,8 +67,13 @@ export interface IElectronAPI {
       path: string,
     ) => Promise<{ success?: boolean; error?: string }>;
     browseForFolder: () => Promise<{ path: string | null }>;
-    getApiKey: () => Promise<{ key: string | null; error?: string }>;
-    setApiKey: (key: string) => Promise<{ success?: boolean; error?: string }>;
+    getApiKey: (
+      service: 'openai' | 'assemblyai',
+    ) => Promise<{ key: string | null; error?: string }>;
+    setApiKey: (
+      key: string,
+      service: 'openai' | 'assemblyai',
+    ) => Promise<{ success?: boolean; error?: string }>;
     setAlwaysOnTop: (
       shouldPin: boolean,
     ) => Promise<{ success?: boolean; error?: string }>;
