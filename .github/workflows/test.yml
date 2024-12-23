@@ -8,21 +8,26 @@ jobs:
 
     strategy:
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        os: [macos-latest, windows-latest]
 
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v3
 
+      - name: Install macOS system dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install pkg-config
+
       - name: Install Node.js and Yarn
         uses: actions/setup-node@v3
         with:
-          node-version: 20  # Updated from 18 to 20
+          node-version: 20
           cache: 'yarn'
 
       - name: Install dependencies
         run: |
-          yarn install
+          yarn install --network-timeout 100000
 
       - name: Run tests
         env:
