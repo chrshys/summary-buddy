@@ -7,13 +7,15 @@ import './App.css';
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <Router>
-        <Routes>
-          <Route path="/*" element={<MainView />} />
-          <Route path="/settings" element={<SettingsView />} />
-        </Routes>
-      </Router>
-    </ThemeProvider>
+    <div data-testid="app-container">
+      <ThemeProvider>
+        <Router>
+          <Routes>
+            <Route path="/*" element={<MainView />} />
+            <Route path="/settings" element={<SettingsView />} />
+          </Routes>
+        </Router>
+      </ThemeProvider>
+    </div>
   );
 }
