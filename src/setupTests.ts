@@ -1,6 +1,6 @@
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
-  value: jest.fn().mockImplementation(query => ({
+  value: jest.fn().mockImplementation((query) => ({
     matches: false,
     media: query,
     onchange: null,
@@ -45,4 +45,4 @@ Object.defineProperty(window, 'electron', {
     onRecordingProgress: jest.fn(() => jest.fn()),
     onRecordingError: jest.fn(() => jest.fn()),
   },
-}); 
+});
