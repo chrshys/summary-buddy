@@ -16,7 +16,10 @@ module.exports = {
     '\\.[jt]sx?$': 'ts-jest',
   },
   transformIgnorePatterns: [
-    // Add this to handle ES modules in node_modules
-    'node_modules/(?!(react-markdown|devlop|vfile|unist-.*|unified|bail|is-plain-obj|trough|remark-.*|mdast-util-.*|micromark.*|decode-named-character-reference|character-entities|property-information|hast-util-whitespace|space-separated-tokens|comma-separated-tokens|/@radix-ui)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-markdown|hast-.*|unist-.*|unified|bail|is-plain-obj|trough|remark-.*|mdast-util-.*|micromark.*|decode-named-character-reference|character-entities|property-information|hast-util-whitespace|space-separated-tokens|comma-separated-tokens|vfile.*|@radix-ui|devlop)/)',
   ],
+  haste: {
+    forceNodeFilesystemAPI: true,
+    enableSymlinks: false,
+  },
 };
