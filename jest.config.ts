@@ -7,6 +7,7 @@ module.exports = {
     '\\.(css|less|sass|scss)$': 'identity-obj-proxy',
   },
   setupFiles: ['./.erb/scripts/check-build-exists.ts'],
+  setupFilesAfterEnv: ['<rootDir>/src/setupTests.ts'],
   testEnvironment: 'jsdom',
   testEnvironmentOptions: {
     url: 'http://localhost/',
@@ -16,7 +17,7 @@ module.exports = {
     '\\.[jt]sx?$': 'ts-jest',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-markdown|hast-.*|unist-.*|unified|bail|is-plain-obj|trough|remark-.*|mdast-util-.*|micromark.*|decode-named-character-reference|character-entities|property-information|hast-util-whitespace|space-separated-tokens|comma-separated-tokens|vfile.*|@radix-ui|devlop|estree-.*|html-url-attributes)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-markdown|trim-lines|ccount|escape-string-regexp|markdown-table|zwitch|longest-streak|hast-.*|unist-.*|unified|bail|is-plain-obj|trough|remark-.*|mdast-util-.*|micromark.*|decode-named-character-reference|character-entities|property-information|hast-util-whitespace|space-separated-tokens|comma-separated-tokens|vfile.*|@radix-ui|devlop|estree-.*|html-url-attributes)/)',
   ],
   modulePathIgnorePatterns: ['<rootDir>/release/app/package.json'],
   haste: {
