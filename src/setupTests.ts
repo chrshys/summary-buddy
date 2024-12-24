@@ -1,3 +1,16 @@
+import '@testing-library/jest-dom';
+import { configure, act } from '@testing-library/react';
+
+// Add type definition for actWait
+declare global {
+  interface Window {
+    actWait: () => Promise<void>;
+  }
+}
+
+// Increase timeout for async operations
+configure({ asyncUtilTimeout: 5000 });
+
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: jest.fn().mockImplementation((query) => ({
@@ -46,3 +59,11 @@ Object.defineProperty(window, 'electron', {
     onRecordingError: jest.fn(() => jest.fn()),
   },
 });
+
+// Helper to wait for all pending promises
+window.actWait = async () => {
+  // Wait for all pending promises to resolve
+  await act(async () => {
+    await Promise.resolve();
+  });
+};
