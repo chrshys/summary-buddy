@@ -12,7 +12,11 @@ module.exports = {
   testEnvironmentOptions: {
     url: 'http://localhost/',
   },
-  testPathIgnorePatterns: ['release/app/dist', '.erb/dll'],
+  testPathIgnorePatterns: [
+    'release/app/dist',
+    '.erb/dll',
+    'src/__tests__/test-utils.tsx',
+  ],
   transform: {
     '\\.[jt]sx?$': 'ts-jest',
   },

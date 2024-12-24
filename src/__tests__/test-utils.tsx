@@ -1,6 +1,11 @@
+/* eslint-disable */
+/**
+ * @jest-environment jsdom
+ * @jest-environment-options {"url": "http://localhost/"}
+ */
+
 import type { ReactElement } from 'react';
 import { render as rtlRender } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
 
 // Add interface for render options
 interface RenderOptions {
@@ -9,8 +14,7 @@ interface RenderOptions {
 
 function render(ui: ReactElement, { route = '/' }: RenderOptions = {}) {
   window.history.pushState({}, 'Test page', route);
-
-  return rtlRender(<BrowserRouter>{ui}</BrowserRouter>);
+  return rtlRender(ui);
 }
 
 // Re-export everything
