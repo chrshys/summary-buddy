@@ -167,7 +167,8 @@
     "files": [
       "dist",
       "node_modules",
-      "package.json"
+      "package.json",
+      "assets/**/*"
     ],
     "mac": {
       "sign": ".erb/scripts/notarize.js",
@@ -183,7 +184,8 @@
       "hardenedRuntime": true,
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist",
-      "gatekeeperAssess": false
+      "gatekeeperAssess": false,
+      "extendInfo": "assets/Info.plist"
     },
     "dmg": {
       "contents": [

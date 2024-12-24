@@ -95,7 +95,16 @@ function createTrayIcon(getAssetPath: (...paths: string[]) => string) {
         ? getAssetPath('trayTemplate.png')
         : getAssetPath('tray.png');
 
+    console.log('Loading tray icon from:', iconPath); // Add logging
+
+    if (!fs.existsSync(iconPath)) {
+      throw new Error(`Tray icon not found at path: ${iconPath}`);
+    }
+
     const icon = nativeImage.createFromPath(iconPath);
+    if (icon.isEmpty()) {
+      throw new Error('Failed to load tray icon image');
+    }
 
     // Resize to appropriate size for platform
     const size = process.platform === 'darwin' ? 22 : 16;
@@ -112,7 +121,17 @@ function createTrayIcon(getAssetPath: (...paths: string[]) => string) {
         ? getAssetPath('trayRecordingTemplate.png')
         : getAssetPath('trayRecording.png');
 
+    if (!fs.existsSync(recordingIconPath)) {
+      throw new Error(
+        `Recording tray icon not found at path: ${recordingIconPath}`,
+      );
+    }
+
     const recordingIcon = nativeImage.createFromPath(recordingIconPath);
+    if (recordingIcon.isEmpty()) {
+      throw new Error('Failed to load recording tray icon image');
+    }
+
     recordingTrayIcon = recordingIcon.resize({ width: size, height: size });
 
     if (process.platform === 'darwin') {
@@ -127,6 +146,15 @@ function createTrayIcon(getAssetPath: (...paths: string[]) => string) {
     tray.setToolTip('Audio Recorder');
   } catch (error) {
     console.error('Error creating tray icon:', error);
+    // Attempt to create a fallback tray icon
+    try {
+      const fallbackIcon = nativeImage.createEmpty();
+      fallbackIcon.resize({ width: 16, height: 16 });
+      tray = new Tray(fallbackIcon);
+      tray.setToolTip('Audio Recorder (Icon Failed to Load)');
+    } catch (fallbackError) {
+      console.error('Failed to create fallback tray icon:', fallbackError);
+    }
   }
 }
 
@@ -213,10 +241,10 @@ const installExtensions = async () => {
     .catch(console.log);
 };
 
-// Add dock hiding code before app initialization
-if (process.platform === 'darwin') {
-  app.dock.hide();
-}
+// Remove or comment out the dock hiding code
+// if (process.platform === 'darwin') {
+//   app.dock.hide();
+// }
 
 const createWindow = async () => {
   if (isDebug) {
@@ -245,7 +273,7 @@ const createWindow = async () => {
     fullscreenable: false,
     resizable: false,
     transparent: true,
-    skipTaskbar: true, // Hide from taskbar
+    skipTaskbar: false,
     webPreferences: {
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
@@ -261,6 +289,13 @@ const createWindow = async () => {
   mainWindow.setAlwaysOnTop(isPinned, 'floating');
 
   mainWindow.loadURL(resolveHtmlPath('index.html'));
+
+  // Add this: Show window once it's ready
+  mainWindow.once('ready-to-show', () => {
+    if (!mainWindow) return;
+    mainWindow.show();
+    mainWindow.focus();
+  });
 
   // Hide the window when it loses focus
   mainWindow.on('blur', () => {

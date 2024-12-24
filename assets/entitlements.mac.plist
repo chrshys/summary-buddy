@@ -8,5 +8,34 @@
     <true/>
     <key>com.apple.security.device.microphone</key>
     <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+    <key>com.apple.security.temporary-exception.audio-unit-host</key>
+    <true/>
+    <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+    <array>
+      <string>com.apple.audio.coreaudiod</string>
+      <string>com.apple.audio.audiohald</string>
+    </array>
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <key>com.apple.security.files.downloads.read-write</key>
+    <true/>
+    <key>com.apple.security.files.desktop.read-write</key>
+    <true/>
+    <key>com.apple.security.assets.movies.read-write</key>
+    <true/>
+    <key>com.apple.security.assets.music.read-write</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.executable</key>
+    <true/>
+    <key>com.apple.security.inherit</key>
+    <true/>
+    <key>com.apple.security.application-groups</key>
+    <array>
+      <string>org.erb.ElectronReact</string>
+    </array>
   </dict>
 </plist>
