@@ -16,7 +16,7 @@ module.exports = {
     '\\.[jt]sx?$': 'ts-jest',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-markdown|hast-.*|unist-.*|unified|bail|is-plain-obj|trough|remark-.*|mdast-util-.*|micromark.*|decode-named-character-reference|character-entities|property-information|hast-util-whitespace|space-separated-tokens|comma-separated-tokens|vfile.*|@radix-ui|devlop|estree-.*)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-markdown|hast-.*|unist-.*|unified|bail|is-plain-obj|trough|remark-.*|mdast-util-.*|micromark.*|decode-named-character-reference|character-entities|property-information|hast-util-whitespace|space-separated-tokens|comma-separated-tokens|vfile.*|@radix-ui|devlop|estree-.*|html-url-attributes)/)',
   ],
   modulePathIgnorePatterns: ['<rootDir>/release/app/package.json'],
   haste: {
