@@ -19,4 +19,4 @@ module.exports = {
     // Add this to handle ES modules in node_modules
     'node_modules/(?!(react-markdown|devlop|vfile|unist-.*|unified|bail|is-plain-obj|trough|remark-.*|mdast-util-.*|micromark.*|decode-named-character-reference|character-entities|property-information|hast-util-whitespace|space-separated-tokens|comma-separated-tokens|/@radix-ui)/)',
   ],
-}; 
+};
